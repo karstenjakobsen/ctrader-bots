@@ -16,10 +16,8 @@ When aa trend changes use indicators to check:
 
 * One market order and one limit order as standard
 
-
-<!-- 6 candles som min -->
+ingen køb unde major trend og vice versa
+Maybe use 20 day EMA for selling buiying
 begge MA skal pege i samme renting
-1 market og 1 limit.  MED TARGETS!
-matketbut SL > 3blocks + spread
+NO MAKRET BUY. Altid targets
 move sl til 0 hvis pofit > 0.7 * blocksize
-<!-- only market buy one on a specifik block nr -->

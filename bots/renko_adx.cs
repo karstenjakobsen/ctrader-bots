@@ -93,9 +93,6 @@ namespace cAlgo.Robots
         [Parameter("Renko block size", DefaultValue = 5)]
         public int RenkoBlockSize { get; set; }
 
-        [Parameter("Draw entry signal", DefaultValue = false)]
-        public bool DrawEntrySignal { get; set; }
-
         [Parameter()]
         public DataSeries Source { get; set; }
  
@@ -126,9 +123,11 @@ namespace cAlgo.Robots
 
         }
 
-        private void RunBreakEvenCheck() {
+        private void RunBreakEvenCheck()
+        {
             var positions = Positions.Where(x => x.Label == cBotLabel && x.StopLoss < 0 && x.SymbolName == CurrentSymbol.Name);
-            foreach(Position position in positions) {
+            foreach(Position position in positions)
+            {
                 BreakEvenIfNeeded(position);
             }
         }
@@ -145,7 +144,8 @@ namespace cAlgo.Robots
             RunBreakEvenCheck();
         }
 
-        private int GetOpenPositions() {
+        private int GetOpenPositions()
+        {
             return Positions.FindAll(cBotLabel, TradeSymbol).Length;
         }
 
@@ -322,11 +322,11 @@ namespace cAlgo.Robots
 
             if (MATrendDirection == true)
             {
-                if(IsGreenCandle == true && (MA1.Result.Last(1) > MA1.Result.Last(2) && MA2.Result.Last(1) > MA2.Result.Last(2)))
+                if(IsGreenCandle == true && (MA1.Result.Last(1) < MA1.Result.Last(2) && MA2.Result.Last(1) < MA2.Result.Last(2)))
                 {
                     Print("No trade - Both MAs are not pointing in UP direction - MA1, current {0} previous {1} - MA2, current {2} previous {3} ", MA1.Result.Last(1), MA1.Result.Last(2), MA2.Result.Last(1), MA2.Result.Last(2));
                     return false;
-                } else if(IsGreenCandle == false && (MA1.Result.Last(0) < MA1.Result.Last(1) && MA2.Result.Last(0) < MA2.Result.Last(1)))
+                } else if(IsGreenCandle == false && (MA1.Result.Last(1) < MA1.Result.Last(2) && MA2.Result.Last(1) < MA2.Result.Last(2)))
                 {
                     Print("No trade - Both MAs are not pointing in DOWN direction - MA1, current {0} previous {1} - MA2, current {2} previous {3} ", MA1.Result.Last(1), MA1.Result.Last(2), MA2.Result.Last(1), MA2.Result.Last(2));
                     return false;
