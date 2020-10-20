@@ -19,27 +19,9 @@ namespace cAlgo.Robots
  
         [Parameter("Lot Size", DefaultValue = 0.1, MinValue = 0.01, Step = 0.01)]
         public double LotSize { get; set; }
- 
-        [Parameter("Entry - Green/red candle", DefaultValue = true)]
-        public bool UseCandle { get; set; }
- 
-        [Parameter("Entry - Candle above/below MAs", DefaultValue = true)]
-        public bool UseCandleMAs { get; set; }
 
-        [Parameter("Entry - Only above/below major trend", DefaultValue = true)]
-        public bool UseTrendMA { get; set; }
-
-        [Parameter("Entry - MAs must point in trend direction", DefaultValue = true)]
-        public bool MATrendDirection { get; set; }
-
-        [Parameter("Entry - Use ADX", DefaultValue = true)]
-        public bool UseADX { get; set; }
-
-        [Parameter("Entry - Use ADX Down", DefaultValue = true)]
-        public bool UseADXDown { get; set; }
-
-        [Parameter("Exit - Close positions on reversal", DefaultValue = true)]
-        public bool CloseOnTrendReversal { get; set; }
+        [Parameter("Entry - Use halving mode", DefaultValue = true)]
+        public bool UseHalvingMode { get; set; }
 
         [Parameter("Max allowed positions", DefaultValue = 4)]
         public int MaxPositions { get; set; }
@@ -47,32 +29,8 @@ namespace cAlgo.Robots
         [Parameter("Limit orders per block", DefaultValue = 2, MinValue = 1, Step = 1)]
         public int LimitOrdersBlock { get; set; }
 
-        [Parameter("Limit order step pips", DefaultValue = 5, MinValue = 1, Step = 1)]
+        [Parameter("Limit order step pips", DefaultValue = 5, MinValue = 0.1, Step = 0.1)]
         public double LimitOrderStep { get; set; }
- 
-        [Parameter("MA01 Type", DefaultValue = MovingAverageType.Simple)]
-        public MovingAverageType MAType1 { get; set; }
- 
-        [Parameter("MA01 Period", DefaultValue = 16)]
-        public int MAPeriod1 { get; set; }
- 
-        [Parameter("MA02 Type", DefaultValue = MovingAverageType.Exponential)]
-        public MovingAverageType MAType2 { get; set; }
- 
-        [Parameter("MA02 Period", DefaultValue = 8)]
-        public int MAPeriod2 { get; set; }
-
-        [Parameter("MA03 Type (Trend)", DefaultValue = MovingAverageType.Simple)]
-        public MovingAverageType MAType3 { get; set; }
- 
-        [Parameter("MA03 Period", DefaultValue = 64)]
-        public int MAPeriod3 { get; set; }
- 
-        [Parameter("ADX Period", DefaultValue = 6)]
-        public int ADXPeriod { get; set; }
- 
-        [Parameter("ADX Level", DefaultValue = 32)]
-        public int ADXLevel { get; set; }
     
         // Should be 3.5 x Block size
         [Parameter("StopLoss in pips", DefaultValue = 15)]
@@ -97,11 +55,8 @@ namespace cAlgo.Robots
         public DataSeries Source { get; set; }
  
         Symbol CurrentSymbol;
-        private MovingAverage MA1;
-        private MovingAverage MA2;
-        private MovingAverage MA3;
-        private DirectionalMovementSystem DMS;
-        private bool IsGreenCandle = false;
+        private BAMMRenkoTrend BAMMTrend;
+        private bool IsGreenCandle;
  
         protected override void OnStart()
         {
@@ -114,10 +69,7 @@ namespace cAlgo.Robots
                 OnStop();
             }
 
-            MA1 = Indicators.MovingAverage(Source, MAPeriod1, MAType1);
-            MA2 = Indicators.MovingAverage(Source, MAPeriod2, MAType2);
-            MA3 = Indicators.MovingAverage(Source, MAPeriod3, MAType3);
-            DMS = Indicators.DirectionalMovementSystem(ADXPeriod);
+            BAMMTrend = Indicators.GetIndicator<BAMMRenkoTrend>(true, true, true, false, true, true, MovingAverageType.Simple, 16, MovingAverageType.Exponential, 8, MovingAverageType.Simple, 64, 6, 35, 6, Source);
 
             RunBreakEvenCheck();
 
@@ -135,8 +87,8 @@ namespace cAlgo.Robots
         protected override void OnBar()
         {
                 IsGreenCandle = isGreenCandle(Bars.OpenPrices.Last(1), Bars.ClosePrices.Last(1));
-                ExitPositions();
-                EntryTrades();
+                CheckPositions();
+                EnterTrades();
         }
  
         protected override void OnTick()
@@ -153,60 +105,49 @@ namespace cAlgo.Robots
             return true;
         }
 
-        private void ExitPositions() {
+        private void CheckPositions() {
 
             // Close on trend change
-            if ((UseCandle == true && IsGreenCandle == false) || CloseOnTrendReversal == true)
+            if (BAMMTrend.Result.Last(1) == 0) {
                 ClosePositions(TradeType.Buy);
-            else if ((UseCandle == true && IsGreenCandle == true) || CloseOnTrendReversal == true)
                 ClosePositions(TradeType.Sell);
+            }
 
         }
-        private void EntryTrades()
+        private void EnterTrades()
         {
+
             double lastBarClose = Bars.ClosePrices.Last(1);
 
             if (IsEntryPossible() == true)
             {
-                if (((UseCandle == true && IsGreenCandle == true) || UseCandle == false) && ((UseCandleMAs == true && lastBarClose > MA1.Result.Last(1) && lastBarClose > MA2.Result.Last(1)) || (UseCandleMAs == false)))
+                double lotSize = 0;
+                double pipDistance = 0;
+
+                if ( BAMMTrend.Result.Last(1) > 0)
                 {          
                     CancelPendingOrders();
-
-                    // // Check if we are allowed to market buy
-                    // if(MarketBuy == true && MarketBuyLimit > openPositions) {
-                    //     Print("BUY more lots!");
-                    //     OpenMarketOrder(TradeType.Buy, LotSize);
-                    //     openPositions = GetOpenPositions();
-                    // } else {
-                    //     Print("Cant open market order {0} {1} {2}", MarketBuy, MarketBuyLimit, openPositions);
-                    // }
-                    double pipDistance = 0;
                     for(int i = 1; i <= LimitOrdersBlock; i++) {
                         pipDistance = pipDistance + LimitOrderStep;
-                        OpenLimitOrder(TradeType.Buy, lastBarClose, LotSize, pipDistance);
+                        lotSize = (UseHalvingMode == true) ? (LotSize/Math.Abs(BAMMTrend.Result.Last(1))) : LotSize;
+                        OpenLimitOrder(TradeType.Buy, lastBarClose, lotSize, pipDistance);
                     }
+                    // lotSize = (UseHalvingMode == true) ? (LotSize/Math.Abs(BAMMTrend.Result.Last(1))) : LotSize;
+                    // OpenMarketOrder(TradeType.Buy, lotSize);
                     
                 }
-                else if (((UseCandle == true && IsGreenCandle == false) || UseCandle == false) && ((UseCandleMAs == true && lastBarClose < MA1.Result.Last(1) && lastBarClose < MA2.Result.Last(1)) || (UseCandleMAs == false)))
+                else if ( BAMMTrend.Result.Last(1) < 0)
                 {
                     CancelPendingOrders();
-
-                    // // Check if we are allowed to market buy
-                    // if(MarketBuy == true && MarketBuyLimit > openPositions) {
-                    //     Print("SELL more lots!");
-                    //     OpenMarketOrder(TradeType.BuySell, LotSize);
-                    //     openPositions = GetOpenPositions();
-                    // } else {
-                    //     Print("Cant open market order {0} {1} {2}", MarketBuy, MarketBuyLimit, openPositions);
-                    // }
-                    double pipDistance = 0;
                     for(int i = 1; i <= LimitOrdersBlock; i++) {
                         pipDistance = pipDistance + LimitOrderStep;
-                        OpenLimitOrder(TradeType.Sell, lastBarClose, LotSize, pipDistance);
+                        lotSize = (UseHalvingMode == true) ? (LotSize/Math.Abs(BAMMTrend.Result.Last(1))) : LotSize;
+                        OpenLimitOrder(TradeType.Sell, lastBarClose, lotSize, pipDistance);
                     }
+                    // lotSize = (UseHalvingMode == true) ? (LotSize/Math.Abs(BAMMTrend.Result.Last(1))) : LotSize;
+                    // OpenMarketOrder(TradeType.Sell, lotSize);
                 }
-            }          
- 
+            }
         }
 
         private void CancelPendingOrders()
@@ -263,74 +204,13 @@ namespace cAlgo.Robots
                 }
             }
         }
- 
-        private void OpenMarketOrder(TradeType tradeType, double dLots)
-        {
-            var volumeInUnits = CurrentSymbol.QuantityToVolumeInUnits(dLots);
-            volumeInUnits = CurrentSymbol.NormalizeVolumeInUnits(volumeInUnits, RoundingMode.Down);
- 
-            string Comment = "";
-
-            // Market order does not have a Target. Let this baby ride until TSL i reached
-            var result = ExecuteMarketOrder(tradeType, CurrentSymbol.Name, volumeInUnits, cBotLabel, StopLoss, 0, Comment, HasTrailingStop);
-            if (!result.IsSuccessful)
-            {
-                Print("Execute Market Order Error: {0}", result.Error.Value);
-                OnStop();
-            }
-        }
- 
-        // private int GetConsecutiveCandles() {
-        //     bool thisCandle = isGreenCandle(Bars.OpenPrices.Last(1), Bars.ClosePrices.Last(1));
-        //     for(int i = 2; i < ConsecutiveCandles; i++) {
-        //        bool previousCandle = isGreenCandle(Bars.OpenPrices.Last(i), Bars.ClosePrices.Last(i));
-        //        if(thisCandle != previousCandle){
-        //            return i - 1;
-        //        }
-        //     }
-        //     return i;
-        // }
 
         private bool IsEntryPossible()
         {
-            if (UseADX == true && DMS.ADX.Last(1) < ADXLevel)
+            if (BAMMTrend.Result.Last(1) == 0)
             {
-                Print("No trade - ADX is low - {0}", DMS.ADX.Last(1));
+                Print("Trade not allowed by Renko indikator - {0}", BAMMTrend.Result.Last(1));
                 return false;
-            }
-
-            if (UseTrendMA == true && UseCandle == true)
-            {
-                if(IsGreenCandle == true && (Bars.ClosePrices.Last(1) < MA3.Result.Last(1))) 
-                {
-                    Print("No trade - Green candle is below major trend - MA {0}, candle {1}", MA3.Result.Last(1));
-                    return false;
-                }
-                else if(IsGreenCandle == false && (Bars.ClosePrices.Last(1) > MA3.Result.Last(1)))
-                {
-                    Print("No trade - red candle is above major trend - MA {0}, candle {1}", MA3.Result.Last(1));
-                    return false;
-                }
-               
-            }
-
-            if (UseADX == true && UseADXDown == true && (DMS.ADX.Last(2) > DMS.ADX.Last(1)))
-            {
-                Print("No trade - ADX is going down - current {0} previous {1} ", DMS.ADX.Last(1), DMS.ADX.Last(2));
-                return false;
-            }
-
-            if (MATrendDirection == true)
-            {
-                if(IsGreenCandle == true && (MA1.Result.Last(1) < MA1.Result.Last(2) && MA2.Result.Last(1) < MA2.Result.Last(2)))
-                {
-                    Print("No trade - Both MAs are not pointing in UP direction - MA1, current {0} previous {1} - MA2, current {2} previous {3} ", MA1.Result.Last(1), MA1.Result.Last(2), MA2.Result.Last(1), MA2.Result.Last(2));
-                    return false;
-                } else if(IsGreenCandle == false && (MA1.Result.Last(1) < MA1.Result.Last(2) && MA2.Result.Last(1) < MA2.Result.Last(2)))
-                {
-                    Print("No trade - Both MAs are not pointing in DOWN direction - MA1, current {0} previous {1} - MA2, current {2} previous {3} ", MA1.Result.Last(1), MA1.Result.Last(2), MA2.Result.Last(1), MA2.Result.Last(2));
-                    return false;
-                }
             }
 
             if(GetOpenPositions() >= MaxPositions) {
@@ -338,18 +218,10 @@ namespace cAlgo.Robots
                 return false;
             }
 
-            if (AlreadyInProfitForTrend() == true){
-                Print("Thanks for all the fish!...");
-                return false;
-            }
 
             return true;
         }
 
-        private bool AlreadyInProfitForTrend() {
-            return false;
-        }
- 
         protected override void OnStop()
         {
  
