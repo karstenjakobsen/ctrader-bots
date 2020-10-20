@@ -50,17 +50,23 @@ namespace cAlgo
         [Parameter("Show winners/loosers", DefaultValue = true)]
         public bool ShowWinLoose { get; set; }
 
-        [Parameter("Show win/loose ratio", DefaultValue = true)]
+        [Parameter("Show RRR", DefaultValue = true)]
         public bool ShowRatio { get; set; }
 
-        [Parameter("Show WR", DefaultValue = true)]
-        public bool ShowWR { get; set; }
+        [Parameter("Show win/loose pips", DefaultValue = false)]
+        public bool ShowWinLoosePips { get; set; }
 
         [Parameter("Show Steps", DefaultValue = true)]
         public bool ShowSteps { get; set; }
 
         [Parameter("Draw Icon", DefaultValue = true)]
         public bool DrawIcon { get; set; }
+
+        [Parameter("Renko Block size", DefaultValue = 4)]
+        public int RenkoBlockSize { get; set; }
+
+        [Parameter("Spread in pips", DefaultValue = 0.5)]
+        public double Spread { get; set; }
 
         [Output("Steps", LineColor = "Blue")]
         public IndicatorDataSeries Result { get; set; }
@@ -71,8 +77,17 @@ namespace cAlgo
         [Output("Winners", LineColor = "Green")]
         public IndicatorDataSeries Winners { get; set; }
 
-        [Output("Ratio", LineColor = "Yellow")]
-        public IndicatorDataSeries Ratio { get; set; }  
+        [Output("LoosePips", LineColor = "Yellow")]
+        public IndicatorDataSeries LoosePips { get; set; }  
+
+        [Output("WinPips", LineColor = "Yellow")]
+        public IndicatorDataSeries WinPips { get; set; }  
+
+        [Output("RRRatio", LineColor = "Yellow")]
+        public IndicatorDataSeries RRRatio { get; set; }
+
+        [Output("AvgRRRatio", LineColor = "Yellow")]
+        public IndicatorDataSeries AvgRRRatio { get; set; }
 
         [Parameter()]
         public DataSeries Source { get; set; }
@@ -83,8 +98,11 @@ namespace cAlgo
         private DirectionalMovementSystem DMS;
         private Bar bar;
         private int TrendSignal = 0;
-        private double _loosers = 0;
-        private double _winners = 0;
+        private double _loosePips = 0;
+        private double _looseTrades = 0;
+        private double _winPips = 0;
+        private double _winTrades = 0;
+        private double _avgrrr = 0;
 
         protected override void Initialize()
         {
@@ -118,19 +136,31 @@ namespace cAlgo
             }
             else
             {
-                if(Math.Abs(TrendSignal) == 1) {
-                    _loosers = _loosers + 2;
-                } else if(Math.Abs(TrendSignal) == 2) {
-                    _loosers = _loosers + 1;
-                } else if(Math.Abs(TrendSignal) >= 3) {
-                    _winners = _winners + (Math.Abs(TrendSignal)-3);
+
+                int _absTrend = Math.Abs(TrendSignal);
+
+                if(_absTrend == 1) {
+                    _loosePips = (_loosePips + (2 * RenkoBlockSize) + (2*Spread));
+                    _looseTrades = _looseTrades + 2;
+                } else if(_absTrend == 2) {
+                    _loosePips = (_loosePips + (1 * RenkoBlockSize) + (2*Spread));
+                    _looseTrades = _looseTrades + 1;
+                } else if(_absTrend > 3) {
+                    _winTrades = _winTrades + 1;
+                    _winPips = _winPips + ((_absTrend * RenkoBlockSize) - (2*Spread));
                 }
+
+                double _rrr = (_winPips/_loosePips);
 
                 TrendSignal = 0;
                 Result[index] = 0;
-                Loosers[index] = ShowWinLoose == true ? _loosers : 0;
-                Winners[index] = ShowWinLoose == true ? _winners : 0;
-                Ratio[index] = ShowRatio == true ? (_winners/_loosers) : 0;
+                Loosers[index] = ShowWinLoose == true ? _looseTrades : 0;
+                LoosePips[index] = ShowWinLoosePips == true ? _loosePips : 0;
+                Winners[index] = ShowWinLoose == true ? _winTrades : 0;
+                WinPips[index] = ShowWinLoosePips == true ? _winPips : 0;
+                RRRatio[index] = ShowRatio == true ? _rrr : 0;
+                _avgrrr = _avgrrr + _rrr;
+                AvgRRRatio[index] = ShowRatio == true ? (_avgrrr/index) : 0;
             }
 
         }
@@ -180,7 +210,7 @@ namespace cAlgo
             {
 
                 bool greenCandle = isGreenCandle(bar.Open, bar.Close);
-
+               
                 if (greenCandle == true && (bar.Close < MA1.Result[index] || bar.Close < MA2.Result[index]))
                 {
                     return false;
@@ -232,7 +262,7 @@ namespace cAlgo
                         return false;
                     }
                 }
-
+                
                 return true;
 
             } catch (Exception e)

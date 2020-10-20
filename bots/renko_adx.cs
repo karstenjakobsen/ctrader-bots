@@ -23,10 +23,10 @@ namespace cAlgo.Robots
         [Parameter("Entry - Use halving mode", DefaultValue = true)]
         public bool UseHalvingMode { get; set; }
 
-        [Parameter("Max allowed positions", DefaultValue = 4)]
+        [Parameter("Max allowed positions", DefaultValue = 0)]
         public int MaxPositions { get; set; }
 
-        [Parameter("Limit orders per block", DefaultValue = 2, MinValue = 1, Step = 1)]
+        [Parameter("Limit orders per block", DefaultValue = 1, MinValue = 1, Step = 1)]
         public int LimitOrdersBlock { get; set; }
 
         [Parameter("Limit order step pips", DefaultValue = 5, MinValue = 0.1, Step = 0.1)]
@@ -48,8 +48,39 @@ namespace cAlgo.Robots
         [Parameter("Breakeven - Trigger Pips", DefaultValue = 10, MinValue = 0.5)]
         public double BreakevenTriggerPips { get; set; }
 
-        [Parameter("Renko block size", DefaultValue = 5)]
+        [Parameter("Renko Block size", DefaultValue = 5)]
         public int RenkoBlockSize { get; set; }
+
+        [Parameter("Spread in pips", DefaultValue = 2)]
+        public double Spread { get; set; }
+
+        // BAMM indicator
+        [Parameter("Entry - Only above/below major trend", DefaultValue = true)]
+        public bool UseMajorTrendMA { get; set; }
+
+        // BAMM indicator
+        [Parameter("Entry - All MAs must point in trend direction", DefaultValue = true)]
+        public bool MATrendDirection { get; set; }
+
+        // BAMM indicator
+        [Parameter("Entry - Minor MAs must point in trend direction", DefaultValue = true)]
+        public bool MinorMATrendDirection { get; set; }
+
+        // BAMM indicator
+        [Parameter("MA03 Period", DefaultValue = 64)]
+        public int MAPeriod3 { get; set; }
+
+        // BAMM indicator
+        [Parameter("ADX Period", DefaultValue = 6)]
+        public int ADXPeriod { get; set; }
+
+        // BAMM indicator
+        [Parameter("ADX Level", DefaultValue = 32)]
+        public int ADXLevel { get; set; }
+
+        // BAMM indicator
+        [Parameter("Entry - Use ADX Down", DefaultValue = true)]
+        public bool UseADXDown { get; set; }
 
         [Parameter()]
         public DataSeries Source { get; set; }
@@ -60,6 +91,8 @@ namespace cAlgo.Robots
  
         protected override void OnStart()
         {
+            Print("Running {0}", cBotLabel);
+
             //check symbol
             CurrentSymbol = Symbols.GetSymbol(TradeSymbol);
  
@@ -69,7 +102,7 @@ namespace cAlgo.Robots
                 OnStop();
             }
 
-            BAMMTrend = Indicators.GetIndicator<BAMMRenkoTrend>(true, true, true, false, true, true, MovingAverageType.Simple, 16, MovingAverageType.Exponential, 8, MovingAverageType.Simple, 64, 6, 35, 6, Source);
+            BAMMTrend = Indicators.GetIndicator<BAMMRenkoTrend>(UseMajorTrendMA, MATrendDirection, MinorMATrendDirection, UseADXDown, MovingAverageType.Simple, 16, MovingAverageType.Exponential, 8, MovingAverageType.Simple, MAPeriod3, ADXPeriod, ADXLevel, true, true, true, true, true, RenkoBlockSize, Spread, Source);
 
             RunBreakEvenCheck();
 
@@ -126,22 +159,28 @@ namespace cAlgo.Robots
 
                 if ( BAMMTrend.Result.Last(1) > 0)
                 {          
+                    lotSize = (UseHalvingMode == true) ? (LotSize/Math.Abs(BAMMTrend.Result.Last(1))) : LotSize;
+
                     CancelPendingOrders();
+                    OpenLimitOrder(TradeType.Buy, lastBarClose, lotSize, 0);
+                    
                     for(int i = 1; i <= LimitOrdersBlock; i++) {
-                        pipDistance = pipDistance + LimitOrderStep;
-                        lotSize = (UseHalvingMode == true) ? (LotSize/Math.Abs(BAMMTrend.Result.Last(1))) : LotSize;
+                        pipDistance = pipDistance + LimitOrderStep;    
                         OpenLimitOrder(TradeType.Buy, lastBarClose, lotSize, pipDistance);
                     }
-                    // lotSize = (UseHalvingMode == true) ? (LotSize/Math.Abs(BAMMTrend.Result.Last(1))) : LotSize;
+                    // // lotSize = (UseHalvingMode == true) ? (LotSize/Math.Abs(BAMMTrend.Result.Last(1))) : LotSize;
                     // OpenMarketOrder(TradeType.Buy, lotSize);
                     
                 }
                 else if ( BAMMTrend.Result.Last(1) < 0)
                 {
+                    lotSize = (UseHalvingMode == true) ? (LotSize/Math.Abs(BAMMTrend.Result.Last(1))) : LotSize;
+
                     CancelPendingOrders();
+                    OpenLimitOrder(TradeType.Sell, lastBarClose, lotSize, 0);
+                    
                     for(int i = 1; i <= LimitOrdersBlock; i++) {
-                        pipDistance = pipDistance + LimitOrderStep;
-                        lotSize = (UseHalvingMode == true) ? (LotSize/Math.Abs(BAMMTrend.Result.Last(1))) : LotSize;
+                        pipDistance = pipDistance + LimitOrderStep;    
                         OpenLimitOrder(TradeType.Sell, lastBarClose, lotSize, pipDistance);
                     }
                     // lotSize = (UseHalvingMode == true) ? (LotSize/Math.Abs(BAMMTrend.Result.Last(1))) : LotSize;
@@ -193,9 +232,10 @@ namespace cAlgo.Robots
 
         private void ClosePositions(TradeType tradeType)
         {
-            Print("Closing all {0} positions", (tradeType == TradeType.Buy) ? "BUY" : "SELL");
             foreach (var position in Positions.FindAll(cBotLabel, TradeSymbol, tradeType))
             {
+                Print("Closing {0} position", (tradeType == TradeType.Buy) ? "BUY" : "SELL");
+
                 var result = ClosePosition(position);
                 if (!result.IsSuccessful)
                 {
@@ -213,7 +253,7 @@ namespace cAlgo.Robots
                 return false;
             }
 
-            if(GetOpenPositions() >= MaxPositions) {
+            if( MaxPositions > 0 && GetOpenPositions() >= MaxPositions) {
                 Print("Max allowed positions met - {0}", MaxPositions);
                 return false;
             }
