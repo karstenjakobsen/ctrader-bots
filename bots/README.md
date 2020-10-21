@@ -21,3 +21,5 @@ Maybe use 20 day EMA for selling buiying
 begge MA skal pege i samme renting
 NO MAKRET BUY. Altid targets
 move sl til 0 hvis pofit > 0.7 * blocksize
+
+Close scire = Stochscore + lastCandlescore

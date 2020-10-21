@@ -175,7 +175,7 @@ namespace cAlgo
             try
             {
                 Bar thisCandle = Bars[index];
-                Bar lastCandle = Bars[index + 1];
+                Bar lastCandle = Bars[index - 1];
 
                 bool thisCandleGreen = isGreenCandle(thisCandle.Open, thisCandle.Close);
                 bool lastCandleGreen = isGreenCandle(lastCandle.Open, lastCandle.Close);

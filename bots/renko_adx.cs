@@ -26,7 +26,7 @@ namespace cAlgo.Robots
         [Parameter("Max allowed positions", DefaultValue = 0)]
         public int MaxPositions { get; set; }
 
-        [Parameter("Limit orders per block", DefaultValue = 1, MinValue = 1, Step = 1)]
+        [Parameter("Limit orders per block", DefaultValue = 1, MinValue = 0, Step = 1)]
         public int LimitOrdersBlock { get; set; }
 
         [Parameter("Limit order step pips", DefaultValue = 5, MinValue = 0.1, Step = 0.1)]
@@ -164,10 +164,13 @@ namespace cAlgo.Robots
                     CancelPendingOrders();
                     OpenLimitOrder(TradeType.Buy, lastBarClose, lotSize, 0);
                     
-                    for(int i = 1; i <= LimitOrdersBlock; i++) {
-                        pipDistance = pipDistance + LimitOrderStep;    
-                        OpenLimitOrder(TradeType.Buy, lastBarClose, lotSize, pipDistance);
+                    if(LimitOrdersBlock > 0) {
+                        for(int i = 1; i <= LimitOrdersBlock; i++) {
+                            pipDistance = pipDistance + LimitOrderStep;    
+                            OpenLimitOrder(TradeType.Buy, lastBarClose, lotSize, pipDistance);
+                        }
                     }
+                    
                     // // lotSize = (UseHalvingMode == true) ? (LotSize/Math.Abs(BAMMTrend.Result.Last(1))) : LotSize;
                     // OpenMarketOrder(TradeType.Buy, lotSize);
                     
@@ -179,9 +182,11 @@ namespace cAlgo.Robots
                     CancelPendingOrders();
                     OpenLimitOrder(TradeType.Sell, lastBarClose, lotSize, 0);
                     
-                    for(int i = 1; i <= LimitOrdersBlock; i++) {
-                        pipDistance = pipDistance + LimitOrderStep;    
-                        OpenLimitOrder(TradeType.Sell, lastBarClose, lotSize, pipDistance);
+                    if(LimitOrdersBlock > 0) {
+                        for(int i = 1; i <= LimitOrdersBlock; i++) {
+                            pipDistance = pipDistance + LimitOrderStep;    
+                            OpenLimitOrder(TradeType.Sell, lastBarClose, lotSize, pipDistance);
+                        }
                     }
                     // lotSize = (UseHalvingMode == true) ? (LotSize/Math.Abs(BAMMTrend.Result.Last(1))) : LotSize;
                     // OpenMarketOrder(TradeType.Sell, lotSize);
