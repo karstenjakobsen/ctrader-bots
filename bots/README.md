@@ -23,3 +23,8 @@ NO MAKRET BUY. Altid targets
 move sl til 0 hvis pofit > 0.7 * blocksize
 
 Close scire = Stochscore + lastCandlescore
+
+Only points when velocity is high and score is falling
+
+TODO 
+allow close in negative if 2 or moreblocks have passed

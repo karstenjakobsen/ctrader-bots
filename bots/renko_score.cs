@@ -23,32 +23,21 @@ namespace cAlgo.Robots
         [Parameter("Use Breakeven", DefaultValue = true)]
         public bool UseBreakeven { get; set; }
 
-        [Parameter("Close Position Score", DefaultValue = 100)]
-        public int CloseScore { get; set; }
+        [Parameter("Breakeven Pips", DefaultValue = 10)]
+        public double BreakEvenPips { get; set; }
+
+        [Parameter("Target EUR", DefaultValue = 100)]
+        public double TargetEUR { get; set; }
 
         [Parameter()]
         public DataSeries Source { get; set; }
 
         Symbol CurrentSymbol;
-
-        private StochasticOscillator _STO;
-        private MovingAverage _MA1;
-        private MovingAverage _MA2;
+        private BAMMRenkoClose _BAMMRenkoClose;
 
         private bool _IsBlockGreen;
 
-        private const int PENALTY_CANDLE_WEIGHT = 0;
-
-        private const int PENALTY_STOCHD_HISTORY = 1;
-        private const int PENALTY_STOCHD_WEIGHT = 50;
-
-        private const int PENALTY_STOCHK_WEIGHT = 50;
-
-        private const int PENALTY_MA1_HISTORY = 1;
-        private const int PENALTY_MA1_WEIGHT = 25;
-
-        private const int PENALTY_MA2_HISTORY = 1;
-        private const int PENALTY_MA2_WEIGHT = 25;
+        private Random random = new Random();
 
         protected override void OnStart()
         {
@@ -67,16 +56,14 @@ namespace cAlgo.Robots
                 OnStop();
             }
 
-            _STO = Indicators.StochasticOscillator(9, 3, 9, MovingAverageType.Simple);
-            _MA1 = Indicators.MovingAverage(Source, 16, MovingAverageType.Simple);
-            _MA2 = Indicators.MovingAverage(Source, 8, MovingAverageType.Exponential);
+            _BAMMRenkoClose = Indicators.GetIndicator<BAMMRenkoClose>(1, 5, 25, 25, 25, 25, 25, 25, 65, 35, 75, 75, 25, 100, Source);
 
             Print("I'm watching you! {0}", FollowLabel);
         }
 
         protected override void OnBar()
         {
-            _IsBlockGreen = isGreenCandle(Bars.OpenPrices.Last(1), Bars.ClosePrices.Last(1));
+            _IsBlockGreen = IsGreenCandle(Bars.OpenPrices.Last(1), Bars.ClosePrices.Last(1));
             RunChecks();
         }
 
@@ -85,14 +72,14 @@ namespace cAlgo.Robots
             var positions = Positions.Where(x => x.Label == FollowLabel && x.SymbolName == CurrentSymbol.Name );
             foreach (Position position in positions)
             {
-                Print("Checking id {0}", position.Id, position.NetProfit);
+                Print("Checking id {0} {1}", position.Id, position.NetProfit);
 
-                if (UseBreakeven == true && position.NetProfit > 0)
+                if (UseBreakeven == true && position.NetProfit > 0 && position.Pips >= BreakEvenPips)
                 {
                     BreakEven(position);  
                 }
 
-                if (ShouldClosePosition(position) == true)
+                if (TryToClosePosition(position) == true)
                 {
                     var result = ClosePosition(position);
                     if (!result.IsSuccessful)
@@ -103,7 +90,7 @@ namespace cAlgo.Robots
             }
         }
 
-        private bool isGreenCandle(double lastBarOpen, double lastBarClose)
+        private bool IsGreenCandle(double lastBarOpen, double lastBarClose)
         {
             return (lastBarOpen < lastBarClose) ? true : false;
         }
@@ -112,8 +99,10 @@ namespace cAlgo.Robots
         {
             if (MoveStop(position.TradeType) == true )
             {
-                Print("MOVE STOP TO {0} SL: {1}", position.EntryPrice + CurrentSymbol.Spread, position.StopLoss);
-                ModifyPosition(position, (position.EntryPrice + CurrentSymbol.Spread), position.TakeProfit);
+                Print("Check if SL {0} != {1} - pips {2} {3}", (position.EntryPrice + CurrentSymbol.Spread), position.StopLoss, BreakEvenPips, position.Pips);
+                if( (position.EntryPrice + CurrentSymbol.Spread) != position.StopLoss ) {
+                    ModifyPosition(position, (position.EntryPrice + CurrentSymbol.Spread), position.TakeProfit);
+                }                
             }
         }
 
@@ -131,149 +120,70 @@ namespace cAlgo.Robots
             return false;
         }
 
-        private int GetCloseScore(Position position)
+        private double GetCloseScore(Position position)
+        {
+            if (position.TradeType == TradeType.Buy) {
+                return _BAMMRenkoClose.CloseLong.Last(1);
+            } else {
+                return _BAMMRenkoClose.CloseShort.Last(1);
+            }
+        }
+
+        private bool ShouldClosePosition(double penalty) { 
+            int roll =  random.Next(1,101);
+            Print("Rolled a {0}, penalty is {1}. {1} >= {0} ?", roll, penalty);
+            if( penalty >= roll) {
+                return true;
+            }
+            return false;
+        }
+
+        private bool RollForProfit(Position position) {
+            int roll =  random.Next(1,101);
+
+            var currentNetProfitInDepositAsset = position.Pips * CurrentSymbol.PipValue * position.VolumeInUnits;
+
+            double _rrr = Math.Ceil((currentNetProfitInDepositAsset/TargetEUR)*10)*1.25;
+
+            Print("Rolled a {0}, RRR is {1}. {1} >= {0} ?", roll, _rrr);
+            if( _rrr >= roll) {
+                return true;
+            }
+            return false;
+        }
+
+        private bool TryToClosePosition(Position position)
         {
 
-            int stochDPenalty = GetStochDPenalty(position);
-            int stochKPenalty = GetStochDPenalty(position);
-            int candlePenalty = GetCandlePenalty(position);
-            int MA1Penalty = GetMA1Penalty(position);
-            int MA2Penalty = GetMA2Penalty(position);
-
-            return (stochDPenalty + stochKPenalty + candlePenalty + MA1Penalty + MA2Penalty);
-
-        }
-
-        private int GetMA2Penalty(Position position) {
-       
-            int _penalty = 0;
-
-            for(int i = 1; i <= PENALTY_MA2_HISTORY; i++) {
-                if (position.TradeType == TradeType.Buy && (_MA2.Result.Last(i) < _MA2.Result.Last(i+1)))
-                {
-                    Print("MA2 going down - I dont like it");
-                    _penalty = _penalty + 1;
+            // Dont close if trade is going the right way
+            if(position.TradeType == TradeType.Buy && IsGreenCandle(Bars.OpenPrices.Last(1), Bars.ClosePrices.Last(1)) == true) {
+                Print("Going the GREEN mile!");
+                if (RollForProfit(position) == true) {
+                    Print("BLING BLING!");
+                    return true;
                 }
-
-                if (position.TradeType == TradeType.Sell && (_MA2.Result.Last(i) > _MA2.Result.Last(i+1)))
-                {
-                    Print("MA2 going up - I dont like it");
-                    _penalty = _penalty + 1;
-                }
+                return false;
             }
 
-            return (_penalty * PENALTY_MA2_WEIGHT);
-
-        }
-
-        private int GetMA1Penalty(Position position) {
-       
-            int _penalty = 0;
-
-            for(int i = 1; i <= PENALTY_MA1_HISTORY; i++) {
-                if (position.TradeType == TradeType.Buy && (_MA1.Result.Last(i) < _MA1.Result.Last(i+1)))
-                {
-                    Print("MA1 going down - I dont like it");
-                    _penalty = _penalty + 1;
+            // Dont close if trade is going the right way
+            if(position.TradeType == TradeType.Sell && !IsGreenCandle(Bars.OpenPrices.Last(1), Bars.ClosePrices.Last(1)) == true) {
+                Print("REDRUM!");
+                if (RollForProfit(position) == true) {
+                    Print("I like them moneiiies!");
+                    return true;
                 }
-
-                if (position.TradeType == TradeType.Sell && (_MA1.Result.Last(i) > _MA1.Result.Last(i+1)))
-                {
-                    Print("MA1 going up - I dont like it");
-                    _penalty = _penalty + 1;
-                }
+                return false;
             }
 
-            return (_penalty * PENALTY_MA1_WEIGHT);
-
-        }
-
-        private int GetStochDPenalty(Position position) {
-       
-            int _penalty = 0;
-
-            for(int i = 1; i <= PENALTY_STOCHD_HISTORY; i++) {
-                if (position.TradeType == TradeType.Buy && (_STO.PercentD.Last(i) < _STO.PercentD.Last(i+1)))
-                {
-                    Print("Stoch D going down - I dont like it");
-                    _penalty = _penalty + 1;
-                }
-
-                if (position.TradeType == TradeType.Sell && (_STO.PercentD.Last(i) > _STO.PercentD.Last(i+1)))
-                {
-                    Print("Stoch D going up - I dont like it");
-                    _penalty = _penalty + 1;
-                }
+            // Dont close if negative. Let SL do that
+            if( position.NetProfit < 0 ) {
+                Print("Dont close - profit negative");
+                return false;
             }
 
-            return (_penalty * PENALTY_STOCHD_WEIGHT);
-
-        }
-
-        private int GetStochKPenalty(Position position) {
-       
-            int _penalty = 0;
-
-            Print("{} > {} ? ", _STO.PercentK.Last(1), _STO.PercentK.Last(2));
-            if (position.TradeType == TradeType.Buy && (_STO.PercentK.Last(1) < _STO.PercentK.Last(2)))
+            if (ShouldClosePosition(GetCloseScore(position)) == true)
             {
-                Print("Stoch K going down - smells funny");
-                _penalty = _penalty + 1;
-            }
 
-            if (position.TradeType == TradeType.Sell && (_STO.PercentK.Last(1) > _STO.PercentK.Last(2)))
-            {
-                Print("Stoch K going up - I dont like it");
-                _penalty = _penalty + 1;
-            }
-
-
-            return (_penalty * PENALTY_STOCHK_WEIGHT);
-
-        }
-
-        private int GetCandlePenalty(Position position)
-        {
-            int _penalty = 0;
-            bool _useWeight = true;
-
-            if (isGreenCandle(Bars.OpenPrices.Last(1), Bars.ClosePrices.Last(1)))
-            {
-                if (position.TradeType == TradeType.Sell)
-                {
-                    Print("Green after red = bad");
-                    _penalty = _penalty + 1;
-                } else {
-                    Print("Going the GREEN mile!");
-                    _useWeight = false;
-                    _penalty = 0;
-                }
-            }
-            else if (!isGreenCandle(Bars.OpenPrices.Last(1), Bars.ClosePrices.Last(1)))
-            {
-                if (position.TradeType == TradeType.Buy)
-                {
-                    Print("Green after green = bad");
-                        _penalty = _penalty + 1;
-                } else {
-                    Print("REDRUM!");
-                    _useWeight = false;
-                    _penalty = 0;
-                }
-            }
-
-            // Only weigh candles when going in the oposite direction
-            return (_useWeight == true) ? (_penalty * PENALTY_CANDLE_WEIGHT) : _penalty;
-        }
-
-        private bool ShouldClosePosition(Position position)
-        {
-
-            int currentCloseScore = GetCloseScore(position);
-
-            Print("{0} >= {1} ?", currentCloseScore, CloseScore);
-            if (currentCloseScore >= CloseScore)
-            {       
                 Print("Yes close");
                 return true;
             }
