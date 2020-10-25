@@ -142,8 +142,20 @@ namespace cAlgo.Robots
             int roll =  random.Next(1,101);
 
             var currentNetProfitInDepositAsset = position.Pips * CurrentSymbol.PipValue * position.VolumeInUnits;
+            double _closeScore = GetCloseScore(position);
+            double _rrr = Math.Ceiling(currentNetProfitInDepositAsset/TargetEUR)*10;
 
-            double _rrr = Math.Ceil((currentNetProfitInDepositAsset/TargetEUR)*10)*1.25;
+            // Add 10% to roll if 0% of rain
+            if(_closeScore == 0) {
+                Print("Added 10 to roll - 0% chance of rain");
+                roll += 10;
+            }
+
+            // add 5% chance foreach rrr level above 1
+            for(int i = 2; i <= _rrr; i++) {
+                roll -= 5;
+                Print("Removed 5 from roll - rrr is {0}", _rrr);
+            }          
 
             Print("Rolled a {0}, RRR is {1}. {1} >= {0} ?", roll, _rrr);
             if( _rrr >= roll) {

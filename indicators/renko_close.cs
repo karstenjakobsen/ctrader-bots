@@ -25,7 +25,7 @@ namespace cAlgo
         [Parameter("Rounds", DefaultValue = 1)]
         public int Rounds { get; set; }
 
-        [Parameter("PENALTY_CANDLE_WEIGHT", DefaultValue = 5)]
+        [Parameter("PENALTY_CANDLE_WEIGHT", DefaultValue = 0)]
         public int PENALTY_CANDLE_WEIGHT { get; set; }
 
         [Parameter("PENALTY_STOCHD_WEIGHT", DefaultValue = 20)]
@@ -43,7 +43,7 @@ namespace cAlgo
         [Parameter("PENALTY_MA2_POINT_WEIGHT", DefaultValue = 20)]
         public int PENALTY_MA2_POINT_WEIGHT { get; set; }
 
-        [Parameter("PENALTY_RAINBOW_WEIGHT", DefaultValue = 50)]
+        [Parameter("PENALTY_RAINBOW_WEIGHT", DefaultValue = 20)]
         public int PENALTY_RAINBOW_WEIGHT { get; set; }
 
         [Parameter("PENALTY_RAINBOW_HIGH_LEVEL", DefaultValue = 47)]
@@ -102,7 +102,7 @@ namespace cAlgo
                 CloseShortVelocity[index] = (_roundShortVelocityScore/Rounds);
                 CloseLongVelocity[index] = (_roundLongVelocityScore/Rounds);
 
-                //ShowMaxShortOpportunity(index);
+                ShowMaxShortOpportunity(index);
 
             } catch(Exception) {
                 return;
@@ -125,32 +125,9 @@ namespace cAlgo
             bool lastblockgreen2 = isGreenCandle(Bars[index-2].Open, Bars[index-2].Close);
             bool lastblockgreen3 = isGreenCandle(Bars[index-3].Open, Bars[index-3].Close);
 
-            // if(-10 <= thisdiffLong <= 10 ) {
-            //     Chart.DrawIcon(Bars[index].OpenTime.ToString(), ChartIconType.Star, index, Bars[index].High, Color.Blue);
-            // }
-
-            if(thisLongScore < thisShortScore && lastLongScore > lastShortScore ) {
+            if( thisShortScore >= 44 && thisShortScore <= 66 && thisLongScore >= 44 && thisLongScore <= 66 ) {
                 Chart.DrawIcon(Bars[index].OpenTime.ToString(), ChartIconType.Star, index, Bars[index].High, Color.Blue);
             }
-            // if( (thisShortScore < lastShortScore && thisLongScore > lastLongScore && thisLongScore >= 50 && thisShortScore >= 50) || (thisShortScore <= 75 && lastLongScore == 100 && thisLongScore == 100)) {
-            //     Chart.DrawIcon(Bars[index].OpenTime.ToString(), ChartIconType.Star, index, Bars[index].High, Color.Blue);
-            // }
-
-            // if( thisLongScore > lastLongScore && _roundLongVelocityScore >= 50 && lastShortScore == 100 && thisLongScore > thisShortScore) {
-            //     Chart.DrawIcon(Bars[index].OpenTime.ToString(), ChartIconType.Star, index, Bars[index].High, Color.Blue);
-            // }
-
-            // if( thisShortScore > lastShortScore && lastLongScore == 100 && ( thisLongScore <= lastLongScore ) && lastShortScore < 35 && thisshortvel > 50 ) {
-            //     Chart.DrawIcon(Bars[index].OpenTime.ToString(), ChartIconType.Star, index, Bars[index].High, Color.Blue);
-            // }
-
-            // if( thisShortScore > lastShortScore && _IsBlockGreen && lastblockgreen && thisLongScore < lastLongScore ) {
-            //     Chart.DrawIcon(Bars[index].OpenTime.ToString(), ChartIconType.Star, index, Bars[index].High, Color.Blue);
-            // }
-
-            // if(!_IsBlockGreen && thisShortScore > lastShortScore) {
-            //     Chart.DrawIcon(Bars[index].OpenTime.ToString(), ChartIconType.Star, index, Bars[index].High, Color.Yellow);
-            // }
 
         }
 
@@ -187,12 +164,12 @@ namespace cAlgo
        
             double _penalty = 0;
 
-            if (tradeType == TradeType.Buy && (_RAIN.Result[index-1] >= PENALTY_RAINBOW_HIGH_LEVEL))
+            if (tradeType == TradeType.Buy && (_RAIN.Result[index] >= PENALTY_RAINBOW_HIGH_LEVEL))
             {
                 _penalty = _penalty + 1;
             }
 
-            if (tradeType == TradeType.Sell && (_RAIN.Result[index-1] <= PENALTY_RAINBOW_LOW_LEVEL))
+            if (tradeType == TradeType.Sell && (_RAIN.Result[index] <= PENALTY_RAINBOW_LOW_LEVEL))
             {
                 _penalty = _penalty + 1;
             }
@@ -278,19 +255,35 @@ namespace cAlgo
 
         }
 
+        // If value is below 11 then only do half
         private double GetStochKPenalty(TradeType tradeType, int index) {
        
             double _penalty = 0;
 
             if (tradeType == TradeType.Buy && (_STO.PercentK[index] < _STO.PercentK[index-1]))
             {
-                _penalty = _penalty + 1;
+                if( _STO.PercentK[index] >= 89 ) {
+                    _penalty += 0.5;     
+                } else {
+                  _penalty += 1;   
+                }
             }
 
-            if (tradeType == TradeType.Sell && (_STO.PercentK[index] < _STO.PercentK[index-1]))
+            // Add penalty if rising or at a very high level
+            if (tradeType == TradeType.Sell && (_STO.PercentK[index] > _STO.PercentK[index-1] || _STO.PercentK[index] >=99) )
             {
-                _penalty = _penalty + 1;
+                // If its rising from a very low level, then only give it half penalty
+                if( _STO.PercentK[index] <= 11 ) {
+                   _penalty += 0.5;     
+                } else {
+                    _penalty += 1;   
+                }
+                
+            } else if (tradeType == TradeType.Sell && (_STO.PercentK[index] < _STO.PercentK[index-1] || _STO.PercentK[index] > 88) ) {
+                // If its falling from a very high level, then still add a small penalty
+                 _penalty += 0.5;
             }
+            
 
             return (_penalty * PENALTY_STOCHK_WEIGHT);
 
