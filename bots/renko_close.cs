@@ -8,10 +8,10 @@ using cAlgo.Indicators;
 namespace cAlgo.Robots
 {
     [Robot(TimeZone = TimeZones.UTC, AccessRights = AccessRights.None)]
-    public class BAMM_RENKO_SCORE : Robot
+    public class BAMM_RENKO_CLOSE : Robot
     {
 
-        [Parameter(DefaultValue = "BAMM_RENKO_SCORE")]
+        [Parameter(DefaultValue = "BAMM_RENKO_CLOSE")]
         public string cBotLabel { get; set; }
 
         [Parameter("Currency pair", DefaultValue = "")]
@@ -26,14 +26,15 @@ namespace cAlgo.Robots
         [Parameter("Breakeven Pips", DefaultValue = 10)]
         public double BreakEvenPips { get; set; }
 
-        [Parameter("Target EUR", DefaultValue = 100)]
-        public double TargetEUR { get; set; }
+        // Around breakeven pips
+        [Parameter("Target Pips", DefaultValue = 10)]
+        public double TargetPips { get; set; }
 
         [Parameter()]
         public DataSeries Source { get; set; }
 
         Symbol CurrentSymbol;
-        private BAMMRenkoClose _BAMMRenkoClose;
+        private BAMMRenkoUgliness _BAMMRenkoUgliness;
 
         private bool _IsBlockGreen;
 
@@ -56,7 +57,7 @@ namespace cAlgo.Robots
                 OnStop();
             }
 
-            _BAMMRenkoClose = Indicators.GetIndicator<BAMMRenkoClose>(1, 5, 25, 25, 25, 25, 25, 25, 65, 35, 75, 75, 25, 100, Source);
+            _BAMMRenkoUgliness = Indicators.GetIndicator<BAMMRenkoUgliness>(1, 0, 25, 25, 25, 25, 25, 25, 47, -53, 31, 6, 3, 3, false, Source);
 
             Print("I'm watching you! {0}", FollowLabel);
         }
@@ -123,44 +124,57 @@ namespace cAlgo.Robots
         private double GetCloseScore(Position position)
         {
             if (position.TradeType == TradeType.Buy) {
-                return _BAMMRenkoClose.CloseLong.Last(1);
+                return _BAMMRenkoUgliness.CloseLong.Last(1);
             } else {
-                return _BAMMRenkoClose.CloseShort.Last(1);
+                return _BAMMRenkoUgliness.CloseShort.Last(1);
             }
         }
 
-        private bool ShouldClosePosition(double penalty) { 
-            int roll =  random.Next(1,101);
-            Print("Rolled a {0}, penalty is {1}. {1} >= {0} ?", roll, penalty);
-            if( penalty >= roll) {
+        private bool RollForClose(Position position) {
+
+            int roll = random.Next(1,101);
+            double closeScore = GetCloseScore(position);
+
+            if(closeScore <= 20) {
+                Print("Low close score, dont close");
+                roll += 100;
+            }
+
+            Print("Rolled a {0}, close score is {1}. {0} <= {1} ?", roll, closeScore);
+
+            if( roll <= closeScore ) {
                 return true;
             }
+
             return false;
         }
 
+        // High roll == take profit  
         private bool RollForProfit(Position position) {
-            int roll =  random.Next(1,101);
 
-            var currentNetProfitInDepositAsset = position.Pips * CurrentSymbol.PipValue * position.VolumeInUnits;
+            double roll =  random.Next(1,101);
+
             double _closeScore = GetCloseScore(position);
-            double _rrr = Math.Ceiling(currentNetProfitInDepositAsset/TargetEUR)*10;
-
-            // Add 10% to roll if 0% of rain
-            if(_closeScore == 0) {
-                Print("Added 10 to roll - 0% chance of rain");
-                roll += 10;
-            }
+            double _RRRLevel = Math.Ceiling(position.Pips/TargetPips);
+            double _rrr = 100-(_RRRLevel*10);
 
             // add 5% chance foreach rrr level above 1
-            for(int i = 2; i <= _rrr; i++) {
-                roll -= 5;
-                Print("Removed 5 from roll - rrr is {0}", _rrr);
-            }          
+            for(int i = 2; i <= _RRRLevel; i++) {
+                roll += 5;
+                Print("Added rrr level +5 to roll - rrr is {0}", _rrr);
+            }    
 
-            Print("Rolled a {0}, RRR is {1}. {1} >= {0} ?", roll, _rrr);
-            if( _rrr >= roll) {
+            // Add close score to roll above 20
+            if(_closeScore > 20) {
+                roll += (_closeScore/2);
+                Print("Added close score +{0}/2 to roll", (_closeScore/2));
+            }      
+
+            Print("Rolled a {0}, RRR is {1}. {0} > {1} ?", roll, _rrr);
+            if(roll > _rrr)  {
                 return true;
             }
+
             return false;
         }
 
@@ -193,7 +207,7 @@ namespace cAlgo.Robots
                 return false;
             }
 
-            if (ShouldClosePosition(GetCloseScore(position)) == true)
+            if (RollForClose(position) == true)
             {
 
                 Print("Yes close");
