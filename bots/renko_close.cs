@@ -30,6 +30,15 @@ namespace cAlgo.Robots
         [Parameter("Target Pips", DefaultValue = 10)]
         public double TargetPips { get; set; }
 
+        [Parameter("STOCH_KPERIODS", DefaultValue = 9)]
+        public int STOCH_KPERIODS { get; set; }
+
+        [Parameter("STOCH_KSLOWING", DefaultValue = 3)]
+        public int STOCH_KSLOWING { get; set; }
+
+        [Parameter("STOCH_DPERIODS", DefaultValue = 9)]
+        public int STOCH_DPERIODS { get; set; }
+
         [Parameter()]
         public DataSeries Source { get; set; }
 
@@ -57,7 +66,7 @@ namespace cAlgo.Robots
                 OnStop();
             }
 
-            _BAMMRenkoUgliness = Indicators.GetIndicator<BAMMRenkoUgliness>(1, 0, 25, 25, 25, 25, 25, 25, 47, -53, 31, 6, 3, 3, false, Source);
+            _BAMMRenkoUgliness = Indicators.GetIndicator<BAMMRenkoUgliness>(1, 0, 25, 25, 25, 25, 25, STOCH_KPERIODS, STOCH_KSLOWING, STOCH_DPERIODS, Source);
 
             Print("I'm watching you! {0}", FollowLabel);
         }
@@ -135,11 +144,6 @@ namespace cAlgo.Robots
             int roll = random.Next(1,101);
             double closeScore = GetCloseScore(position);
 
-            if(closeScore <= 20) {
-                Print("Low close score, dont close");
-                roll += 100;
-            }
-
             Print("Rolled a {0}, close score is {1}. {0} <= {1} ?", roll, closeScore);
 
             if( roll <= closeScore ) {
@@ -149,8 +153,8 @@ namespace cAlgo.Robots
             return false;
         }
 
-        // High roll == take profit  
-        private bool RollForProfit(Position position) {
+        // High roll == move SL
+        private bool RollForTrailingSL(Position position) {
 
             double roll =  random.Next(1,101);
 
@@ -158,19 +162,19 @@ namespace cAlgo.Robots
             double _RRRLevel = Math.Ceiling(position.Pips/TargetPips);
             double _rrr = 100-(_RRRLevel*10);
 
-            // add 5% chance foreach rrr level above 1
+            // add 5% chance to roll foreach RRR level above 1
             for(int i = 2; i <= _RRRLevel; i++) {
                 roll += 5;
                 Print("Added rrr level +5 to roll - rrr is {0}", _rrr);
             }    
 
-            // Add close score to roll above 20
-            if(_closeScore > 20) {
+            // Add close score to roll above 25
+            if(_closeScore > 0) {
                 roll += (_closeScore/2);
                 Print("Added close score +{0}/2 to roll", (_closeScore/2));
             }      
 
-            Print("Rolled a {0}, RRR is {1}. {0} > {1} ?", roll, _rrr);
+            Print("Rolled a {0}, RRR score is {1}. {0} > {1} ?", roll, _rrr);
             if(roll > _rrr)  {
                 return true;
             }
@@ -184,20 +188,22 @@ namespace cAlgo.Robots
             // Dont close if trade is going the right way
             if(position.TradeType == TradeType.Buy && IsGreenCandle(Bars.OpenPrices.Last(1), Bars.ClosePrices.Last(1)) == true) {
                 Print("Going the GREEN mile!");
-                if (RollForProfit(position) == true) {
-                    Print("BLING BLING!");
-                    return true;
-                }
+                // if (RollForTrailingSL(position) == true) {
+                //     Print("BLING BLING!");
+                //     ModifyPosition(position, (Bars.OpenPrices.Last(1) - CurrentSymbol.Spread), position.TakeProfit, true);
+                //     return false;
+                // }
                 return false;
             }
 
             // Dont close if trade is going the right way
             if(position.TradeType == TradeType.Sell && !IsGreenCandle(Bars.OpenPrices.Last(1), Bars.ClosePrices.Last(1)) == true) {
                 Print("REDRUM!");
-                if (RollForProfit(position) == true) {
-                    Print("I like them moneiiies!");
-                    return true;
-                }
+                // if (RollForTrailingSL(position) == true) {
+                //     Print("I like them moneiiies!");
+                //     ModifyPosition(position, (Bars.OpenPrices.Last(1) + CurrentSymbol.Spread), position.TakeProfit, true);
+                //     return false;
+                // }
                 return false;
             }
 

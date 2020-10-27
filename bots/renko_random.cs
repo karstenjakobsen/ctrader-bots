@@ -41,13 +41,13 @@ namespace cAlgo.Robots
         [Parameter("ADXLevel", DefaultValue = 30)]
         public int ADXLevel { get; set; }
 
-        [Parameter("STOCH_KPERIODS", DefaultValue = 6)]
+        [Parameter("STOCH_KPERIODS", DefaultValue = 9)]
         public int STOCH_KPERIODS { get; set; }
 
         [Parameter("STOCH_KSLOWING", DefaultValue = 3)]
         public int STOCH_KSLOWING { get; set; }
 
-        [Parameter("STOCH_DPERIODS", DefaultValue = 3)]
+        [Parameter("STOCH_DPERIODS", DefaultValue = 9)]
         public int STOCH_DPERIODS { get; set; }
         
         [Parameter()]
@@ -77,7 +77,7 @@ namespace cAlgo.Robots
                 OnStop();
             }
 
-            _BAMMRenkoUgliness = Indicators.GetIndicator<BAMMRenkoUgliness>(1, 0, 25, 25, 25, 25, 25, 25, 47, -53, 31, STOCH_KPERIODS, STOCH_KSLOWING, STOCH_DPERIODS, false, Source);
+            _BAMMRenkoUgliness = Indicators.GetIndicator<BAMMRenkoUgliness>(1, 0, 25, 25, 25, 25, 25, STOCH_KPERIODS, STOCH_KSLOWING, STOCH_DPERIODS, Source);
             _DMS = Indicators.DirectionalMovementSystem(ADXPeriod);
             _STO = Indicators.StochasticOscillator(STOCH_KPERIODS, STOCH_KSLOWING, STOCH_DPERIODS, MovingAverageType.Simple);
 
@@ -93,44 +93,39 @@ namespace cAlgo.Robots
             
         }
 
-        private bool MaxShortOpportunity() {
+        private void MaxShortOpportunity() {
 
             // Are we not in a range and is short penalty falling?
-            if( InRange() == false && isShortPenaltyFalling()) {
-                // Yes
-                // Stoch RSI falling from a high-ish point?
-                // Risk falling as well or under 25 ??
-                if( (_STO.PercentK.Last(1) < _STO.PercentK.Last(2)) && (_STO.PercentD.Last(1) < _STO.PercentD.Last(2) && _STO.PercentK.Last(2) >= 40 ) && ( GetCloseScore(TradeType.Sell) <= 50 )  ) {
-                    // Yes. 
-                    // Lets SHORT IT!
-                    Print("I like short shorts! {0} {1} and closescore is {2}", _STO.PercentK.Last(1), _STO.PercentK.Last(2), GetCloseScore(TradeType.Sell));
-                    var lastBar = Bars.LastBar;
-                    Chart.DrawIcon(lastBar.OpenTime.ToString(), ChartIconType.DownArrow, lastBar.OpenTime, lastBar.High, Color.Red);
-                    return true;
+            if( InRange() == false ) {
+                // Yes, Penalty falling?
+                if( isShortPenaltyFalling() ) {
+                    // Risk under 50 and stoch falling??
+                    if( (_STO.PercentK.Last(1) < _STO.PercentK.Last(2)) && (_STO.PercentD.Last(1) < _STO.PercentD.Last(2) ) ) {
+                        // Yes. Lets SHORT IT!
+                        Chart.DrawIcon(Bars[1].OpenTime.ToString(), ChartIconType.DownArrow, Bars[1].OpenTime, Bars[1].High, Color.Red);
+                    }
                 }
+            } else if ( InRange() == false && GetCloseScore(TradeType.Sell) == 0 && GetCloseScore(TradeType.Buy) == 100) {
+                Chart.DrawIcon(Bars[1].OpenTime.ToString(), ChartIconType.Star, Bars[1].OpenTime, Bars[1].High, Color.Red);
             }
-
-            return false;
         }
 
-        private bool MaxLongOpportunity() {
+        private void MaxLongOpportunity() {
 
             // Are we not in a range and is long penalty falling?
             if( InRange() == false && isLongPenaltyFalling()) {
                 // Yes
-                // Stoch RSI rising from a low-ish point?
-                // Risk falling as well or under 25 ??
-                if(  (_STO.PercentK.Last(1) > _STO.PercentK.Last(2)) && (_STO.PercentD.Last(1) > _STO.PercentD.Last(2) && _STO.PercentK.Last(2) <= 60 ) && ( GetCloseScore(TradeType.Buy) <= 50  )  ) {
+                // Stoch RSI rising
+                // Risk under 50 ??
+                if(  (_STO.PercentK.Last(1) > _STO.PercentK.Last(2)) && (_STO.PercentD.Last(1) > _STO.PercentD.Last(2) ) && ( GetCloseScore(TradeType.Buy) <= 50  )  ) {
                     // Yes. 
                     // Lets LONG IT!
-                    Print("The fire is RISING! {0} {1} and closescore is {2}", _STO.PercentK.Last(1), _STO.PercentK.Last(2), GetCloseScore(TradeType.Sell));
                     var lastBar = Bars.LastBar;
                     Chart.DrawIcon(lastBar.OpenTime.ToString(), ChartIconType.DownArrow, lastBar.OpenTime, lastBar.High, Color.Green);
-                    return true;
                 }
+            } else if ( InRange() == false && GetCloseScore(TradeType.Buy) == 0 && GetCloseScore(TradeType.Sell) == 100) {
+                Chart.DrawIcon(Bars[1].OpenTime.ToString(), ChartIconType.Star, Bars[1].OpenTime, Bars[1].High, Color.Green);
             }
-
-            return false;
         }
 
         private bool InRange() {
@@ -306,8 +301,8 @@ namespace cAlgo.Robots
                 return false;
             }
 
-            // return RollForEntry(_BAMMRenkoUgliness.CloseLong.Last(1), tradeType);
-            return MaxLongOpportunity();
+            return RollForEntry(_BAMMRenkoUgliness.CloseLong.Last(1), tradeType);
+            // return MaxLongOpportunity();
 
         }
 
@@ -325,8 +320,8 @@ namespace cAlgo.Robots
                 return false;
             }
 
-            // return RollForEntry(_BAMMRenkoUgliness.CloseShort.Last(1), tradeType);
-            return MaxShortOpportunity();
+            return RollForEntry(_BAMMRenkoUgliness.CloseShort.Last(1), tradeType);
+            // return MaxShortOpportunity();
 
         }
 

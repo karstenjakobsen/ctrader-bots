@@ -37,19 +37,16 @@ namespace cAlgo
         [Parameter("PENALTY_MA2_POINT_WEIGHT", DefaultValue = 25)]
         public int PENALTY_MA2_POINT_WEIGHT { get; set; }
 
-        [Parameter("PENALTY_RAINBOW_WEIGHT", DefaultValue = 25)]
-        public int PENALTY_RAINBOW_WEIGHT { get; set; }
+        // [Parameter("PENALTY_RAINBOW_WEIGHT", DefaultValue = 25)]
+        // public int PENALTY_RAINBOW_WEIGHT { get; set; }
 
-        [Parameter("PENALTY_RAINBOW_HIGH_LEVEL", DefaultValue = 47)]
-        public int PENALTY_RAINBOW_HIGH_LEVEL { get; set; }
+        // [Parameter("PENALTY_RAINBOW_HIGH_LEVEL", DefaultValue = 47)]
+        // public int PENALTY_RAINBOW_HIGH_LEVEL { get; set; }
 
-        [Parameter("PENALTY_RAINBOW_LOW_LEVEL", DefaultValue = -53)]
-        public int PENALTY_RAINBOW_LOW_LEVEL { get; set; }
+        // [Parameter("PENALTY_RAINBOW_LOW_LEVEL", DefaultValue = -53)]
+        // public int PENALTY_RAINBOW_LOW_LEVEL { get; set; }
 
-        [Parameter("ADX_LEVEL", DefaultValue = 31)]
-        public int ADX_LEVEL { get; set; }
-
-        [Parameter("STOCH_KPERIODS", DefaultValue = 6)]
+        [Parameter("STOCH_KPERIODS", DefaultValue = 9)]
         public int STOCH_KPERIODS { get; set; }
 
         [Parameter("STOCH_KSLOWING", DefaultValue = 3)]
@@ -58,9 +55,6 @@ namespace cAlgo
         [Parameter("STOCH_DPERIODS", DefaultValue = 3)]
         public int STOCH_DPERIODS { get; set; }
 
-        [Parameter("Use ranging", DefaultValue = false)]
-        public bool UseRanging { get; set; }
-        
 
         [Parameter()]
         public DataSeries Source { get; set; }
@@ -78,7 +72,7 @@ namespace cAlgo
         private bool _IsBlockGreen;
 
         protected override void Initialize()
-        { 
+        {
             _STO = Indicators.StochasticOscillator(STOCH_KPERIODS, STOCH_KSLOWING, STOCH_DPERIODS, MovingAverageType.Simple);
             _MA1 = Indicators.MovingAverage(Source, 16, MovingAverageType.Simple);
             _MA2 = Indicators.MovingAverage(Source, 8, MovingAverageType.Exponential);
@@ -88,9 +82,10 @@ namespace cAlgo
 
         public override void Calculate(int index)
         {
-            try {
+            try
+            {
 
-                if(index == 0)
+                if (index == 0)
                     return;
 
                 _IsBlockGreen = isGreenCandle(Bars[index].Open, Bars[index].Close);
@@ -100,17 +95,19 @@ namespace cAlgo
                 double _roundShortScore = 0;
                 double _diffLong = 0;
 
-                for(int i = 0; i < Rounds; i++) {
-                    _roundLongScore += CalculateScore(TradeType.Buy, (index-i));
-                    _roundLongScoreLast += CalculateScore(TradeType.Buy, (index-(i+1)));
-                    _roundShortScore += CalculateScore(TradeType.Sell, (index-i));
+                for (int i = 0; i < Rounds; i++)
+                {
+                    _roundLongScore += CalculateScore(TradeType.Buy, (index - i));
+                    _roundLongScoreLast += CalculateScore(TradeType.Buy, (index - (i + 1)));
+                    _roundShortScore += CalculateScore(TradeType.Sell, (index - i));
                     _diffLong = _roundLongScore - _roundShortScore;
-                }       
-                
-                CloseLong[index] = (_roundLongScore/Rounds);
-                CloseShort[index] = (_roundShortScore/Rounds);           
+                }
 
-            } catch(Exception) {
+                CloseLong[index] = (_roundLongScore / Rounds);
+                CloseShort[index] = (_roundShortScore / Rounds);
+
+            } catch (Exception)
+            {
                 return;
             }
         }
@@ -128,14 +125,17 @@ namespace cAlgo
             double candlePenalty = GetCandlePenalty(tradeType, index);
             double MACrossPenalty = GetMACrossPenalty(tradeType, index);
             double MA1PointPenalty = GetMA1PointPenalty(tradeType, index);
-            double MA2PointPenalty = GetMA2PointPenalty(tradeType, index);     
-            double RainbowPenalty = GetRainbowPenalty(tradeType, index);    
+            double MA2PointPenalty = GetMA2PointPenalty(tradeType, index);
+            // double RainbowPenalty = GetRainbowPenalty(tradeType, index);
 
-            double _penalty = (stochDPenalty + stochKPenalty + candlePenalty + MACrossPenalty + MA1PointPenalty + MA2PointPenalty + RainbowPenalty);
+            double _penalty = (stochDPenalty + stochKPenalty + candlePenalty + MACrossPenalty + MA1PointPenalty + MA2PointPenalty);
 
-            if(_penalty > MAX_PENALTY_VALUE) {
+            if (_penalty > MAX_PENALTY_VALUE)
+            {
                 return MAX_PENALTY_VALUE;
-            } else if(_penalty < MIN_PENALTY_VALUE) {
+            }
+            else if (_penalty < MIN_PENALTY_VALUE)
+            {
                 return MIN_PENALTY_VALUE;
             }
 
@@ -144,26 +144,28 @@ namespace cAlgo
         }
 
         // RSI levels are use from the previous candle
-        private double GetRainbowPenalty(TradeType tradeType, int index) {
-       
-            double _penalty = 0;
+        // private double GetRainbowPenalty(TradeType tradeType, int index)
+        // {
 
-            if (tradeType == TradeType.Buy && (_RAIN.Result[index] >= PENALTY_RAINBOW_HIGH_LEVEL))
-            {
-                _penalty = _penalty + 1;
-            }
+        //     double _penalty = 0;
 
-            if (tradeType == TradeType.Sell && (_RAIN.Result[index] <= PENALTY_RAINBOW_LOW_LEVEL))
-            {
-                _penalty = _penalty + 1;
-            }
+        //     if (tradeType == TradeType.Buy && (_RAIN.Result[index] >= PENALTY_RAINBOW_HIGH_LEVEL))
+        //     {
+        //         _penalty = _penalty + 1;
+        //     }
 
-            return (_penalty * PENALTY_RAINBOW_WEIGHT);
+        //     if (tradeType == TradeType.Sell && (_RAIN.Result[index] <= PENALTY_RAINBOW_LOW_LEVEL))
+        //     {
+        //         _penalty = _penalty + 1;
+        //     }
 
-        }
+        //     return (_penalty * PENALTY_RAINBOW_WEIGHT);
 
-        private double GetMACrossPenalty(TradeType tradeType, int index) {
-       
+        // }
+
+        private double GetMACrossPenalty(TradeType tradeType, int index)
+        {
+
             double _penalty = 0;
 
             if (tradeType == TradeType.Buy && (_MA2.Result[index] < _MA1.Result[index]))
@@ -176,108 +178,84 @@ namespace cAlgo
                 _penalty = _penalty + 1;
             }
 
-            if(UseRanging) {
-                return Ranging(index) ? ((_penalty * PENALTY_MA_CROSS_WEIGHT)/2) : ((_penalty * PENALTY_MA_CROSS_WEIGHT)*2);
-            } else {
-                return (_penalty * PENALTY_MA_CROSS_WEIGHT);
-            }
+            return (_penalty * PENALTY_MA_CROSS_WEIGHT);
 
         }
 
-        private double GetMA1PointPenalty(TradeType tradeType, int index) {
-       
+        private double GetMA1PointPenalty(TradeType tradeType, int index)
+        {
+
             double _penalty = 0;
 
-            if (tradeType == TradeType.Buy && (_MA1.Result[index] < _MA1.Result[index-1]))
+            if (tradeType == TradeType.Buy && (_MA1.Result[index] < _MA1.Result[index - 1]))
             {
                 _penalty = _penalty + 1;
             }
 
-            if (tradeType == TradeType.Sell && (_MA1.Result[index] > _MA1.Result[index-1]))
+            if (tradeType == TradeType.Sell && (_MA1.Result[index] > _MA1.Result[index - 1]))
             {
                 _penalty = _penalty + 1;
             }
 
-
-            if(UseRanging) {
-                return Ranging(index) ? ((_penalty * PENALTY_MA1_POINT_WEIGHT)/2) : ((_penalty * PENALTY_MA1_POINT_WEIGHT)*2);
-            } else {
-                return (_penalty * PENALTY_MA1_POINT_WEIGHT);
-            }
+            return (_penalty * PENALTY_MA1_POINT_WEIGHT);
 
         }
 
-        private double GetMA2PointPenalty(TradeType tradeType, int index) {
-       
+        private double GetMA2PointPenalty(TradeType tradeType, int index)
+        {
+
             double _penalty = 0;
 
-            if (tradeType == TradeType.Buy && (_MA2.Result[index] < _MA2.Result[index-1]))
+            if (tradeType == TradeType.Buy && (_MA2.Result[index] < _MA2.Result[index - 1]))
             {
                 _penalty = _penalty + 1;
             }
 
-            if (tradeType == TradeType.Sell && (_MA2.Result[index] > _MA2.Result[index-1]))
+            if (tradeType == TradeType.Sell && (_MA2.Result[index] > _MA2.Result[index - 1]))
             {
                 _penalty = _penalty + 1;
             }
 
-            if(UseRanging) {
-                return Ranging(index) ? ((_penalty * PENALTY_MA2_POINT_WEIGHT)/2) : ((_penalty * PENALTY_MA2_POINT_WEIGHT)*2);
-            } else {
-                return (_penalty * PENALTY_MA2_POINT_WEIGHT);
-            }
+            return (_penalty * PENALTY_MA2_POINT_WEIGHT);
+
 
         }
 
-        private bool Ranging(int index) {
+        private double GetStochKPenalty(TradeType tradeType, int index)
+        {
 
-            if ( (_DMS.ADX[index] <= ADX_LEVEL) )
+            double _penalty = 0;
+
+            if (tradeType == TradeType.Sell && ((_STO.PercentK[index] > _STO.PercentK[index - 1] && _STO.PercentK[index] > 10) || (_STO.PercentK[index] > 90)))
             {
-                // In range
-                return true;
+                _penalty = 1;
             }
 
-            return false;
+            if (tradeType == TradeType.Buy && ((_STO.PercentK[index] < _STO.PercentK[index - 1] && _STO.PercentK[index] < 88) || (_STO.PercentK[index] < 10)))
+            {
+                _penalty = 1;
+            }
+
+            return (_penalty * PENALTY_STOCHK_WEIGHT);
 
         }
 
-        private double GetStochKPenalty(TradeType tradeType, int index) {
-       
+        private double GetStochDPenalty(TradeType tradeType, int index)
+        {
+
             double _penalty = 0;
 
-            if (tradeType == TradeType.Sell && (_STO.PercentK[index] > _STO.PercentK[index-1] || _STO.PercentK[index] > 97 )) {
-                _penalty = 1;     
+            if (tradeType == TradeType.Sell && ((_STO.PercentD[index] > _STO.PercentD[index - 1] && _STO.PercentD[index] > 10) || (_STO.PercentD[index] > 93)))
+            {
+                _penalty = 1;
             }
 
-            if (tradeType == TradeType.Buy && (_STO.PercentK[index] < _STO.PercentK[index-1] || _STO.PercentK[index] < 3 )) {
-                _penalty = 1; 
+            if (tradeType == TradeType.Buy && ((_STO.PercentD[index] < _STO.PercentD[index - 1] && _STO.PercentD[index] < 93) || (_STO.PercentD[index] < 10)))
+            {
+                _penalty = 1;
             }
 
-            if(UseRanging) {
-                return Ranging(index) ? ((_penalty * PENALTY_STOCHK_WEIGHT)*2) : ((_penalty * PENALTY_STOCHK_WEIGHT)/2);
-            } else {
-                return (_penalty * PENALTY_STOCHK_WEIGHT);
-            }
-
-        }
-
-        private double GetStochDPenalty(TradeType tradeType, int index) {
-       
-            double _penalty = 0;
-
-            if (tradeType == TradeType.Sell && (_STO.PercentD[index] > _STO.PercentD[index-1] || _STO.PercentK[index] > 89 ) ) {
-                _penalty = 1;     
-            }
-
-            if (tradeType == TradeType.Buy && (_STO.PercentD[index] < _STO.PercentD[index-1] || _STO.PercentK[index] < 8 )) {
-                _penalty = 1; 
-            }
-
-            if(UseRanging) {
-                return Ranging(index) ? ((_penalty * PENALTY_STOCHD_WEIGHT)*2) : ((_penalty * PENALTY_STOCHD_WEIGHT)/2);
-            } else {
-                return (_penalty * PENALTY_STOCHD_WEIGHT);
-            }
+            return (_penalty * PENALTY_STOCHD_WEIGHT);
 
         }
 
