@@ -26,6 +26,9 @@ namespace cAlgo.Robots
         [Parameter("Stop Loss", DefaultValue = 10, MinValue = 0.5, Step = 0.5)]
         public double StopLoss { get; set; }
 
+        [Parameter("Entry - Use average in?", DefaultValue = true)]
+        public bool UseAverageIn { get; set; }
+
         [Parameter("Maximum allowed positions", DefaultValue = 1)]
         public int MaxPositions { get; set; }
 
@@ -41,15 +44,15 @@ namespace cAlgo.Robots
         [Parameter("ADXLevel", DefaultValue = 30)]
         public int ADXLevel { get; set; }
 
-        [Parameter("STOCH_KPERIODS", DefaultValue = 9)]
+        [Parameter("STOCH_KPERIODS", DefaultValue = 6)]
         public int STOCH_KPERIODS { get; set; }
 
         [Parameter("STOCH_KSLOWING", DefaultValue = 3)]
         public int STOCH_KSLOWING { get; set; }
 
-        [Parameter("STOCH_DPERIODS", DefaultValue = 9)]
+        [Parameter("STOCH_DPERIODS", DefaultValue = 3)]
         public int STOCH_DPERIODS { get; set; }
-        
+
         [Parameter()]
         public DataSeries Source { get; set; }
 
@@ -77,7 +80,8 @@ namespace cAlgo.Robots
                 OnStop();
             }
 
-            _BAMMRenkoUgliness = Indicators.GetIndicator<BAMMRenkoUgliness>(1, 0, 25, 25, 25, 25, 25, STOCH_KPERIODS, STOCH_KSLOWING, STOCH_DPERIODS, Source);
+            _BAMMRenkoUgliness = Indicators.GetIndicator<BAMMRenkoUgliness>(1, 0, 25, 25, 25, 25, 25, STOCH_KPERIODS, STOCH_KSLOWING, STOCH_DPERIODS,
+            Source);
             _DMS = Indicators.DirectionalMovementSystem(ADXPeriod);
             _STO = Indicators.StochasticOscillator(STOCH_KPERIODS, STOCH_KSLOWING, STOCH_DPERIODS, MovingAverageType.Simple);
 
@@ -85,51 +89,17 @@ namespace cAlgo.Robots
 
         protected override void OnBar()
         {
-            EnterTrades();     
         }
 
         protected override void OnTick()
         {
-            
+            EnterTrades();
         }
 
-        private void MaxShortOpportunity() {
-
-            // Are we not in a range and is short penalty falling?
-            if( InRange() == false ) {
-                // Yes, Penalty falling?
-                if( isShortPenaltyFalling() ) {
-                    // Risk under 50 and stoch falling??
-                    if( (_STO.PercentK.Last(1) < _STO.PercentK.Last(2)) && (_STO.PercentD.Last(1) < _STO.PercentD.Last(2) ) ) {
-                        // Yes. Lets SHORT IT!
-                        Chart.DrawIcon(Bars[1].OpenTime.ToString(), ChartIconType.DownArrow, Bars[1].OpenTime, Bars[1].High, Color.Red);
-                    }
-                }
-            } else if ( InRange() == false && GetCloseScore(TradeType.Sell) == 0 && GetCloseScore(TradeType.Buy) == 100) {
-                Chart.DrawIcon(Bars[1].OpenTime.ToString(), ChartIconType.Star, Bars[1].OpenTime, Bars[1].High, Color.Red);
-            }
-        }
-
-        private void MaxLongOpportunity() {
-
-            // Are we not in a range and is long penalty falling?
-            if( InRange() == false && isLongPenaltyFalling()) {
-                // Yes
-                // Stoch RSI rising
-                // Risk under 50 ??
-                if(  (_STO.PercentK.Last(1) > _STO.PercentK.Last(2)) && (_STO.PercentD.Last(1) > _STO.PercentD.Last(2) ) && ( GetCloseScore(TradeType.Buy) <= 50  )  ) {
-                    // Yes. 
-                    // Lets LONG IT!
-                    var lastBar = Bars.LastBar;
-                    Chart.DrawIcon(lastBar.OpenTime.ToString(), ChartIconType.DownArrow, lastBar.OpenTime, lastBar.High, Color.Green);
-                }
-            } else if ( InRange() == false && GetCloseScore(TradeType.Buy) == 0 && GetCloseScore(TradeType.Sell) == 100) {
-                Chart.DrawIcon(Bars[1].OpenTime.ToString(), ChartIconType.Star, Bars[1].OpenTime, Bars[1].High, Color.Green);
-            }
-        }
-
-        private bool InRange() {
-            if (_DMS.ADX.Last(1) < ADXLevel) {
+        private bool InRange()
+        {
+            if (_DMS.ADX.Last(1) < ADXLevel)
+            {
                 return true;
             }
             return false;
@@ -156,29 +126,37 @@ namespace cAlgo.Robots
             {
                 if (IsLongPossible(TradeType.Buy) == true)
                 {
-                    OpenMarketOrder(TradeType.Buy, LotSize, StopLoss, TakeProfit);
+                    double _modLotSize = UseAverageIn ? (LotSize / 2) : LotSize;
+                    OpenMarketOrder(TradeType.Buy, _modLotSize, StopLoss, TakeProfit);
                 }
 
                 if (IsShortPossible(TradeType.Sell) == true)
                 {
+                    double _modLotSize = UseAverageIn ? (LotSize / 2) : LotSize;
                     OpenMarketOrder(TradeType.Sell, LotSize, StopLoss, TakeProfit);
                 }
-            } catch(Exception e) {
+
+            } catch (Exception e)
+            {
                 Print("ERROR {0}", e);
-            }   
+            }
         }
 
-        private void OpenMarketOrder(TradeType tradeType, double dLots, double stopLoss, double takeProfitPips) {
-            
+        private void OpenMarketOrder(TradeType tradeType, double dLots, double stopLoss, double takeProfitPips)
+        {
+
             var volumeInUnits = CurrentSymbol.QuantityToVolumeInUnits(dLots);
             volumeInUnits = CurrentSymbol.NormalizeVolumeInUnits(volumeInUnits, RoundingMode.Down);
 
             var result = ExecuteMarketOrder(tradeType, CurrentSymbol.Name, volumeInUnits, cBotLabel, stopLoss, takeProfitPips, null, false);
 
-            if (!result.IsSuccessful) {
+            if (!result.IsSuccessful)
+            {
                 Print("Execute Market Order Error: {0}", result.Error.Value);
                 OnStop();
-            } else {
+            }
+            else
+            {
                 Print(GetMeAQuote(), (tradeType == TradeType.Buy) ? LONG_NAME : SHORT_NAME);
             }
         }
@@ -197,41 +175,59 @@ namespace cAlgo.Robots
 
         private bool RollForEntry(double penalty, TradeType tradeType)
         {
-
-            int roll = random.Next(1, 101);
-            double finalPenalty = 0;
-
-            finalPenalty = RisingPenaltyScoreAdjustment(FallingPenaltyScoreAdjustment(penalty, tradeType), tradeType);
-
-            Print("Rolled a {0}, orignal penalty is {1}, modified {2} for {3}", roll, penalty, finalPenalty, tradeType);
-
-            if (finalPenalty >= roll)
+            // Only trade below 50 and not rising
+            if (penalty < 50 && (tradeType == TradeType.Buy && !isLongPenaltyRising()) || (tradeType == TradeType.Sell && !isShortPenaltyRising()))
             {
-                Print("No trade! {0} >= {1}", finalPenalty, roll);
-                return false;
+                if (tradeType == TradeType.Buy && Bars.HighPrices.Last(0) > Bars.ClosePrices.Last(1))
+                {
+                    Print("I want better prices for my longs");
+                    return false;
+                }
+
+                if (tradeType == TradeType.Sell && Bars.LowPrices.Last(0) < Bars.ClosePrices.Last(1))
+                {
+                    Print("I want better prices for my shorts");
+                    return false;
+                }
+
+                // int roll = random.Next(1, 101);
+                // double finalPenalty = 0;
+
+                // finalPenalty = penalty - 15;
+
+                // Print("Rolled a {0}, orignal penalty is {1}, modified {2} for {3}", roll, penalty, finalPenalty, tradeType);
+
+                // if (finalPenalty >= roll)
+                // {
+                //     Print("No trade! {0} >= {1}", finalPenalty, roll);
+                //     return false;
+                // }
+
+                return true;
             }
 
-            return true;
+            return false;
         }
 
         // If penalty is rising, then add a modfier. 
         // Rising penalty = BAD KARMA! So we are adding the level to 100 for it to always be added hen rising
-        private double RisingPenaltyScoreAdjustment(double penalty, TradeType tradeType){
+        // private double RisingPenaltyScoreAdjustment(double penalty, TradeType tradeType){
 
-            if ( (tradeType == TradeType.Buy && isLongPenaltyRising() ) || (tradeType == TradeType.Sell && isShortPenaltyRising() ) )
-            {
-                Print("Penalty rising {0} + {1} for {2} - Worst opportinuty!", penalty, 100, tradeType);
-                return (penalty + 100);
-            }
+        //     if ( (tradeType == TradeType.Buy && isLongPenaltyRising() ) || (tradeType == TradeType.Sell && isShortPenaltyRising() ) )
+        //     {
+        //         Print("Penalty rising {0} + {1} for {2} - Worst opportinuty!", penalty, 100, tradeType);
+        //         return (penalty + 100);
+        //     }
 
-            return penalty;
-        }
+        //     return penalty;
+        // }
 
         // If penalty is falling, then add a modfier. 
         // Falling penalty = GOOD!
-        private double FallingPenaltyScoreAdjustment(double penalty, TradeType tradeType){
+        private double FallingPenaltyScoreAdjustment(double penalty, TradeType tradeType)
+        {
 
-            if ( (tradeType == TradeType.Buy && isLongPenaltyFalling() && isShortPenaltyRising() ) || (tradeType == TradeType.Sell && isShortPenaltyFalling() && isLongPenaltyRising() ) )
+            if ((tradeType == TradeType.Buy && isLongPenaltyFalling() && isShortPenaltyRising()) || (tradeType == TradeType.Sell && isShortPenaltyFalling() && isLongPenaltyRising()))
             {
                 Print("Penalty falling {0} - 10 for {1} - BEST China!", penalty, tradeType);
                 return (penalty - 10);
@@ -240,56 +236,29 @@ namespace cAlgo.Robots
             return penalty;
         }
 
-        private bool isLongPenaltyFalling() {
+        private bool isLongPenaltyFalling()
+        {
             return (_BAMMRenkoUgliness.CloseLong.Last(1) < _BAMMRenkoUgliness.CloseLong.Last(2)) ? true : false;
         }
 
-        private bool isLongPenaltyRising() {
+        private bool isLongPenaltyRising()
+        {
             return (_BAMMRenkoUgliness.CloseLong.Last(1) > _BAMMRenkoUgliness.CloseLong.Last(2)) ? true : false;
         }
 
-        private bool isShortPenaltyFalling() {
+        private bool isShortPenaltyFalling()
+        {
             return (_BAMMRenkoUgliness.CloseShort.Last(1) < _BAMMRenkoUgliness.CloseShort.Last(2)) ? true : false;
         }
 
-        private bool isShortPenaltyRising() {
+        private bool isShortPenaltyRising()
+        {
             return (_BAMMRenkoUgliness.CloseShort.Last(1) > _BAMMRenkoUgliness.CloseShort.Last(2)) ? true : false;
         }
 
-        // private bool PriceIsGood(TradeType tradeType) {
-
-        //     // In a range then try to get a better price
-        //     if(InRange()) {
-        //         if( tradeType == tradeType.Buy ) {
-        //             if ( Bars.OpenPrices.Last(1) > Bars.ClosePrices.Last(1) ) {
-        //                 // Last candle was red - just buy here
-        //                 return true;
-        //             } else {
-        //                 // Last candle was green
-        //                 Print("I want to buy at {0}", Bars.ClosePrices.Last(1));
-        //             }
-        //         } else {
-        //             if ( Bars.OpenPrices.Last(1) > Bars.ClosePrices.Last(1) ) {
-        //                 // Last candle was red
-        //                 double wishfullThinking = Bars.OpenPrices.Last(1) + (CurrentSymbol.Spread*2);
-        //                 double currentPrice = Bars.OpenPrices.Last(0);
-        //                 Print("I want to sell at {0}", wishfullThinking);  
-        //                 if( currentPrice <= wishfullThinking ) {
-
-        //                 }            
-        //             } else {
-        //                 // Last candle was green - just buy here
-        //                 return true;
-        //             }
-        //         }
-        //     } else {
-        //         return true;
-        //     }
-        // }
-
         private bool IsLongPossible(TradeType tradeType)
         {
-            
+
             if (IsEntryPossible() == false)
             {
                 return false;
@@ -297,7 +266,6 @@ namespace cAlgo.Robots
 
             if (MaxLongPositions > 0 && GetOpenLongPositions() >= MaxLongPositions)
             {
-                Print("Max long positions met - {0}", MaxLongPositions);
                 return false;
             }
 
@@ -316,12 +284,10 @@ namespace cAlgo.Robots
 
             if (MaxShortPositions > 0 && GetOpenShortPositions() >= MaxShortPositions)
             {
-                Print("Max short positions met - {0}", MaxShortPositions);
                 return false;
             }
 
             return RollForEntry(_BAMMRenkoUgliness.CloseShort.Last(1), tradeType);
-            // return MaxShortOpportunity();
 
         }
 
@@ -330,7 +296,6 @@ namespace cAlgo.Robots
 
             if (MaxPositions > 0 && GetOpenPositions() >= MaxPositions)
             {
-                Print("Max allowed positions met - {0}", MaxPositions);
                 return false;
             }
 
@@ -340,7 +305,7 @@ namespace cAlgo.Robots
 
         protected override void OnStop()
         {
-
+            Stop();
         }
 
         private int GetMeARandomNumber(int @from, int to)

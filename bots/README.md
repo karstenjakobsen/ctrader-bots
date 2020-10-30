@@ -28,3 +28,5 @@ Only points when velocity is high and score is falling
 
 TODO 
 allow close in negative if 2 or moreblocks have passed
+use stoch to enter insted og close score
+no trading in ranges

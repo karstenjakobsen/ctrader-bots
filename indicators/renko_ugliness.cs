@@ -22,19 +22,19 @@ namespace cAlgo
         [Parameter("PENALTY_CANDLE_WEIGHT", DefaultValue = 0)]
         public int PENALTY_CANDLE_WEIGHT { get; set; }
 
-        [Parameter("PENALTY_STOCHD_WEIGHT", DefaultValue = 25)]
+        [Parameter("PENALTY_STOCHD_WEIGHT", DefaultValue = 20)]
         public int PENALTY_STOCHD_WEIGHT { get; set; }
 
-        [Parameter("PENALTY_STOCHK_WEIGHT", DefaultValue = 25)]
+        [Parameter("PENALTY_STOCHK_WEIGHT", DefaultValue = 20)]
         public int PENALTY_STOCHK_WEIGHT { get; set; }
 
-        [Parameter("PENALTY_MA_CROSS_WEIGHT", DefaultValue = 25)]
+        [Parameter("PENALTY_MA_CROSS_WEIGHT", DefaultValue = 20)]
         public int PENALTY_MA_CROSS_WEIGHT { get; set; }
 
-        [Parameter("PENALTY_MA1_POINT_WEIGHT", DefaultValue = 25)]
+        [Parameter("PENALTY_MA1_POINT_WEIGHT", DefaultValue = 20)]
         public int PENALTY_MA1_POINT_WEIGHT { get; set; }
 
-        [Parameter("PENALTY_MA2_POINT_WEIGHT", DefaultValue = 25)]
+        [Parameter("PENALTY_MA2_POINT_WEIGHT", DefaultValue = 20)]
         public int PENALTY_MA2_POINT_WEIGHT { get; set; }
 
         // [Parameter("PENALTY_RAINBOW_WEIGHT", DefaultValue = 25)]
@@ -46,7 +46,7 @@ namespace cAlgo
         // [Parameter("PENALTY_RAINBOW_LOW_LEVEL", DefaultValue = -53)]
         // public int PENALTY_RAINBOW_LOW_LEVEL { get; set; }
 
-        [Parameter("STOCH_KPERIODS", DefaultValue = 9)]
+        [Parameter("STOCH_KPERIODS", DefaultValue = 6)]
         public int STOCH_KPERIODS { get; set; }
 
         [Parameter("STOCH_KSLOWING", DefaultValue = 3)]
@@ -64,6 +64,7 @@ namespace cAlgo
         private MovingAverage _MA1;
         private MovingAverage _MA2;
         private DirectionalMovementSystem _DMS;
+        private Random random = new Random();
 
         private const int MAX_PENALTY_VALUE = 100;
 
@@ -82,29 +83,30 @@ namespace cAlgo
 
         public override void Calculate(int index)
         {
+            if (index == 0)
+                return;
+
             try
             {
-
-                if (index == 0)
-                    return;
-
                 _IsBlockGreen = isGreenCandle(Bars[index].Open, Bars[index].Close);
 
                 double _roundLongScore = 0;
-                double _roundLongScoreLast = 0;
                 double _roundShortScore = 0;
                 double _diffLong = 0;
 
                 for (int i = 0; i < Rounds; i++)
                 {
                     _roundLongScore += CalculateScore(TradeType.Buy, (index - i));
-                    _roundLongScoreLast += CalculateScore(TradeType.Buy, (index - (i + 1)));
                     _roundShortScore += CalculateScore(TradeType.Sell, (index - i));
-                    _diffLong = _roundLongScore - _roundShortScore;
+                    _diffLong = _roundLongScore - _roundShortScore;                    
                 }
 
                 CloseLong[index] = (_roundLongScore / Rounds);
                 CloseShort[index] = (_roundShortScore / Rounds);
+
+                string[] check = { "green", "red", "green", "red", "green" };
+                int[] blockindexlist = CheckPattern(check, index);
+                Print(blockindexlist);
 
             } catch (Exception)
             {
@@ -281,5 +283,52 @@ namespace cAlgo
             return _penalty * PENALTY_CANDLE_WEIGHT;
         }
 
+        // private void ShowExits(TradeType tradeType)
+        // {
+
+        //     if (tradeType == TradeType.Sell && (CountConsecutiveCloseScore(tradeType, 2, 1, 0) == 2))
+        //     {
+        //         Print("Draw this bitch");
+        //         Chart.DrawIcon(Bars[1].OpenTime.ToString(), ChartIconType.UpArrow, 1, Bars[1].Low, Color.Green);
+        //     }
+
+        //     if (tradeType == TradeType.Buy && (CountConsecutiveCloseScore(tradeType, 1, 1, 0) == 1))
+        //     {
+        //         Print("snoop dooog");
+        //         Chart.DrawIcon(Bars[1].OpenTime.ToString(), ChartIconType.DownArrow, 1, Bars[1].High, Color.Red);
+        //     }
+
+        // }
+
+        private int[] CheckPattern(string[] blocks, int startIndex) {
+
+            int[] blockIndexlist = new int [] {};
+            var tempList = blockIndexlist.ToList();
+
+            if(startIndex==0)
+            {
+                return tempList.ToArray();
+            }
+
+            // string[] blocks = { "green", "red", "green", "red", "green" };
+            foreach(string block in blocks)
+            {
+                string blockresult = (isGreenCandle(Bars[startIndex].Open, Bars[startIndex].Close)) ? "green" : "red";
+                if( blockresult == block )
+                {
+                    tempList.Add(startIndex);
+                }
+                else
+                {
+                    return new int [] {};
+                }
+                startIndex--;
+            }
+
+            return tempList.ToArray();
+
+        }
+
     }
+    
 }
