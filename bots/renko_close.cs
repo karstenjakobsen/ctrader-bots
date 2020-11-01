@@ -20,29 +20,35 @@ namespace cAlgo.Robots
         [Parameter("Follow Label", DefaultValue = "")]
         public string FollowLabel { get; set; }
 
-        [Parameter("Entry - Use Breakeven", DefaultValue = true)]
-        public bool UseBreakeven { get; set; }
-
-        [Parameter("Entry - Use average in?", DefaultValue = false)]
-        public bool UseAverageIn { get; set; }
+        [Parameter("Use Breakeven", DefaultValue = true)]
+        public bool UseBreakeven { get; set; } 
 
         [Parameter("Breakeven Pips", DefaultValue = 10)]
         public double BreakEvenPips { get; set; }
 
-        // Used to take profits during an open position
-        [Parameter("Lock In Profit Percent", DefaultValue = 0.5)]
-        public double LOCK_IN_PROFIT_PERCENT { get; set; }
+        [Parameter("Stop Loss", DefaultValue = 10)]
+        public double StopLossPips { get; set; }
 
-        [Parameter("Average In Percent", DefaultValue = 30)]
-        public double AVERAGE_IN_PERCENT { get; set; }
+        // No positions allowed if max daily loss is reached
+        [Parameter("Max Daily Loss - EUR", DefaultValue = 1000)]
+        public double MAX_DAILY_LOSS { get; set; }
 
-        // No positions allowed if max daily loss is reached for this pair
-        [Parameter("Max Daily Loss Percent", DefaultValue = 0.5)]
-        public double MAX_DAILY_LOSS_PERCENT { get; set; }
+        [Parameter("Position Size Risk %", DefaultValue = 0.25)]
+        public double POSITION_RISK_PERCENT { get; set; }
 
         // No positions allowed if daily profit is reached for all pairs
-        [Parameter("Lock In Daily Profit Percent", DefaultValue = 2)]
+        [Parameter("Lock In Daily Profit %", DefaultValue = 2)]
         public double LOCK_IN_DAILY_PROFIT_PERCENT { get; set; }
+
+        // Used to take profits during an open position
+        [Parameter("Lock In Profit %", DefaultValue = 0.5)]
+        public double LOCK_IN_PROFIT_PERCENT { get; set; }
+
+        // [Parameter("Entry - Use average in?", DefaultValue = false)]
+        // public bool UseAverageIn { get; set; }
+
+        // [Parameter("Average In %", DefaultValue = 30)]
+        // public double AVERAGE_IN_PERCENT { get; set; }
 
         [Parameter("STOCH_KPERIODS", DefaultValue = 6)]
         public int STOCH_KPERIODS { get; set; }
@@ -68,11 +74,17 @@ namespace cAlgo.Robots
 
         private bool _IsLastBlockGreen;
 
+        private bool _marketOpen;
+
         private Random random = new Random();
 
         protected override void OnStart()
         {
 
+            // Subscribe to events
+            Positions.Opened += PositionsOnOpened;
+
+            // Set currency
             CurrentSymbol = Symbols.GetSymbol(TradeSymbol);
 
             if (CurrentSymbol == null)
@@ -81,45 +93,121 @@ namespace cAlgo.Robots
                 OnStop();
             }
 
-            _BAMMRenkoUgliness = Indicators.GetIndicator<BAMMRenkoUgliness>(1, 0, 20, 20, 20, 20, 20, STOCH_KPERIODS, STOCH_KSLOWING, STOCH_DPERIODS,
-            Source);
+            _BAMMRenkoUgliness = Indicators.GetIndicator<BAMMRenkoUgliness>(1, 0, 20, 20, 20, 20, 20, STOCH_KPERIODS, STOCH_KSLOWING, STOCH_DPERIODS, Source);
             _DMS = Indicators.DirectionalMovementSystem(ADXPeriod);
 
-            Print("I'm watching you {0}! ", (FollowLabel == "") ? "ALL" : FollowLabel);
+            SetMarketStatus();
+
+            UpdateDisplay();
+
+            Print("I'm watching you! {0}", FollowLabel);
         }
 
-        private void AllowedMarketHours(Position position)
+        private void UpdateDisplay()
         {
-            // Check Market Hours
-            if( (position.EntryTime.Hour >= 7 && position.EntryTime.Hour < 10) || (position.EntryTime.Hour >= 14 && position.EntryTime.Hour < 19) ) {
-                return; 
+            // Show position size
+            DisplayPositionSizeRiskOnChart();
+
+            // Market status
+            DisplayMarketStatus();
+        }
+
+        private void DisplayPositionSizeRiskOnChart()
+        {
+            string text = POSITION_RISK_PERCENT + "% x " + StopLossPips + "pip = " + GetPositionSizeInLots() + " lots";
+            Chart.DrawStaticText("positionRisk", text, VerticalAlignment.Top, HorizontalAlignment.Right, Color.Yellow);
+        }
+
+        private double GetPositionSize()
+        {
+            double positionSizeForRisk = ((Account.Balance * POSITION_RISK_PERCENT) / 100) / (StopLossPips * CurrentSymbol.PipValue);
+            return CurrentSymbol.NormalizeVolumeInUnits(positionSizeForRisk, RoundingMode.Up);
+        }
+
+        private double GetPositionSizeInLots()
+        {
+            return Math.Round(CurrentSymbol.VolumeInUnitsToQuantity(GetPositionSize()),2);
+        }
+
+        private void SetMarketStatus()
+        {
+            if( (Server.Time.Hour >= 7 && Server.Time.Hour < 10) || (Server.Time.Hour >= 12 && Server.Time.Hour < 16) ) {       
+                _marketOpen = true;
+                return;
             }
 
-            var result = ClosePosition(position);
-            if (result.IsSuccessful)
+            _marketOpen = false;
+
+        }
+
+        private void DisplayMarketStatus()
+        {
+            if(_marketOpen == true)
             {
-                Print("Go outside and play - {0}!", position.EntryTime.Hour);
+                Chart.DrawStaticText("marketStatus", "MARKET IS OPEN", VerticalAlignment.Top, HorizontalAlignment.Center, Color.Green);
             }
-
+            else
+            {
+                Chart.DrawStaticText("marketStatus", "MARKET IS CLOSED", VerticalAlignment.Top, HorizontalAlignment.Center, Color.Red);
+            }   
+            
         }
 
         protected override void OnBar()
         {
             _IsLastBlockGreen = IsGreenCandle(Bars.OpenPrices.Last(1), Bars.ClosePrices.Last(1));
+
+            SetMarketStatus();
+            
+            // Run all checks
             RunChecks();
+            
+            // Update display text
+            UpdateDisplay();
 
         }
 
+        private void PositionsOnOpened(PositionOpenedEventArgs args)
+        {
+            var position = args.Position;
+
+            // Auto size all positions without comment
+            if( position.Comment == "" )
+            {
+                // Check if market is open
+                if( _marketOpen )
+                {
+                    // Check if daily loss/profit limit is hit
+                    if( DailyNetProfitLossHit(position) == false )
+                    {
+                        Print("Cloning position...");
+
+                        // Get new quantity from risk management
+                        var volumeInUnits = CurrentSymbol.QuantityToVolumeInUnits(GetPositionSizeInLots());
+                        volumeInUnits = CurrentSymbol.NormalizeVolumeInUnits(volumeInUnits, RoundingMode.Down);
+                        var result = ExecuteMarketOrderAsync(position.TradeType, position.SymbolName, volumeInUnits, cBotLabel, StopLossPips, 0, "auto_size", false);
+                    }
+                    
+                }
+
+                ClosePosition(position);
+            }
+
+        }        
+
         protected override void OnTick()
         {
+            SetMarketStatus();
+
             // Check for profit
-            var positions = (FollowLabel == "") ? Positions.Where(x => x.SymbolName == CurrentSymbol.Name) : Positions.Where(x => x.Label == FollowLabel && x.SymbolName == CurrentSymbol.Name);
+            var positions = Positions.Where(x => x.Label == FollowLabel && x.SymbolName == CurrentSymbol.Name);
 
             foreach (Position position in positions)
             {
-                if (UseBreakeven == true && position.Pips >= BreakEvenPips && position.HasTrailingStop == false)
-                {        
-                    BreakEven(position);            
+
+                if (UseBreakeven == true && position.Pips >= BreakEvenPips && position.HasTrailingStop == false && PositionHasBreakeven(position) == false)
+                {  
+                    BreakEven(position);                     
                 }
 
                 if(position.HasTrailingStop == false)
@@ -128,18 +216,22 @@ namespace cAlgo.Robots
                     LockInProfits(position);
                 }
 
-                // Check if position is allowed
-                AllowedMarketHours(position);
-
-                // Check if daily loss/profit limit is hit
-                DailyNetProfitLoss(position);
+                
             }
 
         }
 
-        private void DailyNetProfitLoss(Position position)
-        {
+        private bool PositionHasBreakeven(Position position) {
+            if ( (position.TradeType == TradeType.Buy && position.EntryPrice > position.StopLoss) || (position.TradeType == TradeType.Sell && position.EntryPrice < position.StopLoss))
+            {
+                return false;
+            }
+            return true;
+        }
 
+        private bool DailyNetProfitLossHit(Position position)
+        {
+            return false;
         }
 
         protected void LockInProfits(Position position)
@@ -162,43 +254,50 @@ namespace cAlgo.Robots
             return Math.Round((netProfit / balance) * 100, 2);
         }
 
-        private void AverageIntoPosition(Position position)
-        {
-            var currentvolumeInUnits = CurrentSymbol.QuantityToVolumeInUnits(position.Quantity);
-            currentvolumeInUnits = CurrentSymbol.NormalizeVolumeInUnits(currentvolumeInUnits, RoundingMode.Up);
+        // private void AverageIntoPosition(Position position)
+        // {
+        //     var currentvolumeInUnits = CurrentSymbol.QuantityToVolumeInUnits(position.Quantity);
+        //     currentvolumeInUnits = CurrentSymbol.NormalizeVolumeInUnits(currentvolumeInUnits, RoundingMode.Up);
 
-            var addvolumeInUnits = CurrentSymbol.QuantityToVolumeInUnits(position.Quantity * (AVERAGE_IN_PERCENT/100));
-            addvolumeInUnits = CurrentSymbol.NormalizeVolumeInUnits(addvolumeInUnits, RoundingMode.Up);
+        //     var addvolumeInUnits = CurrentSymbol.QuantityToVolumeInUnits(position.Quantity * (AVERAGE_IN_PERCENT/100));
+        //     addvolumeInUnits = CurrentSymbol.NormalizeVolumeInUnits(addvolumeInUnits, RoundingMode.Up);
 
-            if (_IsLastBlockGreen == false && position.TradeType == TradeType.Buy)
-            {
-                Print("Average in here with {0} to {1}", addvolumeInUnits, currentvolumeInUnits);
-                ModifyPosition(position, (addvolumeInUnits + currentvolumeInUnits));
-            }
+        //     if (_IsLastBlockGreen == false && position.TradeType == TradeType.Buy)
+        //     {
+        //         Print("Average in here with {0} to {1}", addvolumeInUnits, currentvolumeInUnits);
+        //         ModifyPosition(position, (addvolumeInUnits + currentvolumeInUnits));
+        //     }
 
-            if (_IsLastBlockGreen == true && position.TradeType == TradeType.Sell)
-            {
-                Print("Average in here with {0} to {1}", addvolumeInUnits, currentvolumeInUnits);
-                ModifyPosition(position, (addvolumeInUnits + currentvolumeInUnits));
-            }
-        }
+        //     if (_IsLastBlockGreen == true && position.TradeType == TradeType.Sell)
+        //     {
+        //         Print("Average in here with {0} to {1}", addvolumeInUnits, currentvolumeInUnits);
+        //         ModifyPosition(position, (addvolumeInUnits + currentvolumeInUnits));
+        //     }
+        // }
 
         private void RunChecks()
         {
-            var positions = (FollowLabel == "") ? Positions.Where(x => x.SymbolName == CurrentSymbol.Name) : Positions.Where(x => x.Label == FollowLabel && x.SymbolName == CurrentSymbol.Name);
+            var positions = Positions.Where(x => x.Label == FollowLabel && x.SymbolName == CurrentSymbol.Name);
 
             foreach (Position position in positions)
             {
                 
-                if (UseAverageIn && position.Pips < 0)
-                {
-                    AverageIntoPosition(position);
-                }
+                // if (UseAverageIn && position.Pips < 0)
+                // {
+                //     AverageIntoPosition(position);
+                // }
 
                 // Dont active TSL before there is a little room
                 if (position.Pips >= BreakEvenPips)
                 {
                     ActivateTrailingStop(position);
+                }
+
+                // Only close when is going oppsit way
+                if( position.HasTrailingStop == false && TryToClosePosition(position) == true)
+                {
+                    Print("Closing position...");
+                    ClosePosition(position);
                 }
             }
         }
@@ -208,12 +307,11 @@ namespace cAlgo.Robots
             return (lastBarOpen < lastBarClose) ? true : false;
         }
 
-        private void BreakEven(Position position)
+        private TradeResult BreakEven(Position position)
         {
-            if ( (position.TradeType == TradeType.Buy && position.EntryPrice > position.StopLoss) || (position.TradeType == TradeType.Sell && position.EntryPrice < position.StopLoss))
-            {
-                ModifyPosition(position, (position.EntryPrice + (2*CurrentSymbol.Spread)), position.TakeProfit);   
-            }
+            // double newPrice = (position.TradeType == TradeType.Buy) ? (position.EntryPrice + (2*CurrentSymbol.Spread)) : (position.EntryPrice - (2*CurrentSymbol.Spread));
+            // ModifyPosition(position, newPrice, position.TakeProfit);   
+            return position.ModifyStopLossPips((2*CurrentSymbol.Spread));
         }
 
         private int CountConsecutiveCloseScore(TradeType tradeType, int bars, int index, double score)
@@ -362,14 +460,17 @@ namespace cAlgo.Robots
                 return false;
             }
 
-            if (RollForClose(position) == true)
-            {
-                return true;
-            }
-            else
-            {
+            if( _IsLastBlockGreen && position.TradeType == TradeType.Buy ) {
+                Print("Going the Green mile!");
                 return false;
             }
+
+            if( !_IsLastBlockGreen && position.TradeType == TradeType.Sell ) {
+                Print("Redrum!");
+                return false;
+            }
+
+            return RollForClose(position);
         }
 
     }

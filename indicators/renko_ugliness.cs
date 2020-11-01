@@ -103,15 +103,51 @@ namespace cAlgo
 
                 CloseLong[index] = (_roundLongScore / Rounds);
                 CloseShort[index] = (_roundShortScore / Rounds);
-
-                string[] check = { "green", "red", "green", "red", "green" };
-                int[] blockindexlist = CheckPattern(check, index);
-                Print(blockindexlist);
+                // DrawRange(index);
+                DrawDobbeltBottom(index);   
+                StairsDown(index);             
+                
 
             } catch (Exception)
             {
                 return;
             }
+        }
+
+        private void DrawRange(int index) {
+            string[] check = { "green", "red", "green", "red", "green" };
+            int[] blockindexlist = CheckPattern(check, index);
+            foreach(int block in blockindexlist)
+            {   
+                Chart.DrawIcon(Bars[block].OpenTime.ToString(), ChartIconType.Star, block, Bars[block].High, Color.Blue);
+            }
+        }
+
+        private void DrawDobbeltBottom(int index) {
+            string[] check = { "green", "red", "red", "red", "red", "green", "green", "green", "green", "red", "red", "red" };
+            int[] blockindexlist = CheckPattern(check, index);
+            foreach(int block in blockindexlist)
+            {   
+                Chart.DrawIcon(Bars[block].OpenTime.ToString(), ChartIconType.Star, block, Bars[block].High, Color.Blue);
+            }
+        }
+
+        private void StairsDown(int index) {
+            
+            string[] check = { "red", "green", "red", "red", "green", "red", "red", "green", "red", "red", "green" };
+            int[] blockindexlist = CheckPattern(check, index);
+            foreach(int block in blockindexlist)
+            {   
+                Chart.DrawIcon(Bars[block].OpenTime.ToString(), ChartIconType.Star, block, Bars[block].High, Color.Blue);
+            }
+
+            string[] check2 = { "red", "red", "green", "red", "red", "green", "red", "green" };
+            int[] blockindexlist2 = CheckPattern(check2, index);
+            foreach(int block in blockindexlist2)
+            {   
+                Chart.DrawIcon(Bars[block].OpenTime.ToString(), ChartIconType.Star, block, Bars[block].High, Color.Blue);
+            }
+
         }
 
         private bool isGreenCandle(double lastBarOpen, double lastBarClose)
