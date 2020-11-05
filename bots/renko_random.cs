@@ -26,9 +26,6 @@ namespace cAlgo.Robots
         [Parameter("Stop Loss", DefaultValue = 10, MinValue = 0.5, Step = 0.5)]
         public double StopLoss { get; set; }
 
-        [Parameter("Entry - Use average in?", DefaultValue = true)]
-        public bool UseAverageIn { get; set; }
-
         [Parameter("Maximum allowed positions", DefaultValue = 1)]
         public int MaxPositions { get; set; }
 
@@ -38,11 +35,8 @@ namespace cAlgo.Robots
         [Parameter("Maximum Short positions", DefaultValue = 1)]
         public int MaxShortPositions { get; set; }
 
-        [Parameter("ADXPeriod", DefaultValue = 4)]
-        public int ADXPeriod { get; set; }
-
-        [Parameter("ADXLevel", DefaultValue = 30)]
-        public int ADXLevel { get; set; }
+        [Parameter("Use Limit Orders", DefaultValue = true)]
+        public bool UseLimitOrders { get; set; }
 
         [Parameter("STOCH_KPERIODS", DefaultValue = 6)]
         public int STOCH_KPERIODS { get; set; }
@@ -53,6 +47,16 @@ namespace cAlgo.Robots
         [Parameter("STOCH_DPERIODS", DefaultValue = 3)]
         public int STOCH_DPERIODS { get; set; }
 
+        [Parameter("ADXPeriod", DefaultValue = 4)]
+        public int ADXPeriod { get; set; }
+
+        [Parameter("ADXLevel", DefaultValue = 28)]
+        public int ADXLevel { get; set; }
+
+         [Parameter("Use Market Hours", DefaultValue = true)]
+        public bool UseMarketHours { get; set; }
+
+
         [Parameter()]
         public DataSeries Source { get; set; }
 
@@ -62,8 +66,6 @@ namespace cAlgo.Robots
 
         private BAMMRenkoUgliness _BAMMRenkoUgliness;
         private DirectionalMovementSystem _DMS;
-        private StochasticOscillator _STO;
-
         private const string LONG_NAME = "Long";
         private const string SHORT_NAME = "Short";
 
@@ -80,29 +82,20 @@ namespace cAlgo.Robots
                 OnStop();
             }
 
-            _BAMMRenkoUgliness = Indicators.GetIndicator<BAMMRenkoUgliness>(1, 0, 25, 25, 25, 25, 25, STOCH_KPERIODS, STOCH_KSLOWING, STOCH_DPERIODS,
-            Source);
+            _BAMMRenkoUgliness = Indicators.GetIndicator<BAMMRenkoUgliness>(1, 0, 0, 0, 0, 35, 35, 35, 28, false, STOCH_KPERIODS, STOCH_KSLOWING, STOCH_DPERIODS, Source);
             _DMS = Indicators.DirectionalMovementSystem(ADXPeriod);
-            _STO = Indicators.StochasticOscillator(STOCH_KPERIODS, STOCH_KSLOWING, STOCH_DPERIODS, MovingAverageType.Simple);
 
         }
 
         protected override void OnBar()
         {
+            CancelPendingOrders();
+            EnterTrades();
         }
 
         protected override void OnTick()
         {
-            EnterTrades();
-        }
-
-        private bool InRange()
-        {
-            if (_DMS.ADX.Last(1) < ADXLevel)
-            {
-                return true;
-            }
-            return false;
+            
         }
 
         private int GetOpenPositions()
@@ -124,17 +117,26 @@ namespace cAlgo.Robots
         {
             try
             {
-                if (IsLongPossible(TradeType.Buy) == true)
-                {
-                    double _modLotSize = UseAverageIn ? (LotSize / 2) : LotSize;
-                    OpenMarketOrder(TradeType.Buy, _modLotSize, StopLoss, TakeProfit);
-                }
 
-                if (IsShortPossible(TradeType.Sell) == true)
+                TradeType trade = GetMeARandomTrade();
+
+                if(trade == TradeType.Buy)
                 {
-                    double _modLotSize = UseAverageIn ? (LotSize / 2) : LotSize;
-                    OpenMarketOrder(TradeType.Sell, LotSize, StopLoss, TakeProfit);
+                    if (IsLongPossible(trade) == true)
+                    {
+                        double _modLotSize = LotSize;
+                        OpenOrder(trade, _modLotSize, StopLoss, TakeProfit);
+                    }
                 }
+                else
+                {
+                    if (IsShortPossible(trade) == true)
+                    {
+                        double _modLotSize = LotSize;
+                        OpenOrder(trade, LotSize, StopLoss, TakeProfit);
+                    }
+                }
+                
 
             } catch (Exception e)
             {
@@ -142,98 +144,92 @@ namespace cAlgo.Robots
             }
         }
 
-        private void OpenMarketOrder(TradeType tradeType, double dLots, double stopLoss, double takeProfitPips)
+        private void CancelPendingOrders()
+        {
+
+            // Print("Found {0} pending orders for label {1} {2}", PendingOrders.Count(x => x.Label == cBotLabel && x.SymbolName == CurrentSymbol.Name), cBotLabel, CurrentSymbol.Name);
+            var orders = PendingOrders.Where(x => x.Label == cBotLabel && x.SymbolName == CurrentSymbol.Name);
+
+            foreach (var order in orders)
+            {
+                var result = CancelPendingOrderAsync(order);
+            }
+        }
+
+        private void OpenOrder(TradeType tradeType, double dLots, double stopLoss, double takeProfitPips)
         {
 
             var volumeInUnits = CurrentSymbol.QuantityToVolumeInUnits(dLots);
             volumeInUnits = CurrentSymbol.NormalizeVolumeInUnits(volumeInUnits, RoundingMode.Down);
 
-            var result = ExecuteMarketOrder(tradeType, CurrentSymbol.Name, volumeInUnits, cBotLabel, stopLoss, takeProfitPips, null, false);
-
-            if (!result.IsSuccessful)
+            if( UseLimitOrders == true )
             {
-                Print("Execute Market Order Error: {0}", result.Error.Value);
-                OnStop();
+                if (tradeType == TradeType.Buy)
+                {
+                    Print("Hoping to catch this UPTREND lower at {0}", Bars.OpenPrices.Last(1));
+                    PlaceLimitOrderAsync(tradeType, CurrentSymbol.Name, volumeInUnits, (Bars.OpenPrices.Last(1)), cBotLabel, stopLoss, takeProfitPips, null, null, false);
+                    
+                }
+                else if (tradeType == TradeType.Sell)
+                {
+                    Print("Hoping to catch this DOWNTREND higher at {0}", Bars.OpenPrices.Last(1));
+                    PlaceLimitOrderAsync(tradeType, CurrentSymbol.Name, volumeInUnits, (Bars.OpenPrices.Last(1)), cBotLabel, stopLoss, takeProfitPips, null, null, false);
+                }
+
+                Print(GetMeAQuote(), (tradeType == TradeType.Buy) ? LONG_NAME : SHORT_NAME);
             }
             else
             {
+                ExecuteMarketOrder(tradeType, CurrentSymbol.Name, volumeInUnits, cBotLabel, stopLoss, takeProfitPips, null, false);
                 Print(GetMeAQuote(), (tradeType == TradeType.Buy) ? LONG_NAME : SHORT_NAME);
             }
+            
         }
 
-        private double GetCloseScore(TradeType tradeType)
+        private double GetCloseScore(TradeType tradeType, int index = 1)
         {
             if (tradeType == TradeType.Buy)
             {
-                return _BAMMRenkoUgliness.CloseLong.Last(1);
+                return _BAMMRenkoUgliness.CloseLong.Last(index);
             }
             else
             {
-                return _BAMMRenkoUgliness.CloseShort.Last(1);
+                return _BAMMRenkoUgliness.CloseShort.Last(index);
             }
         }
 
-        private bool RollForEntry(double penalty, TradeType tradeType)
+        private bool InRange(int index = 1)
         {
-            // Only trade below 50 and not rising
-            if (penalty < 50 && (tradeType == TradeType.Buy && !isLongPenaltyRising()) || (tradeType == TradeType.Sell && !isShortPenaltyRising()))
+            if (_DMS.ADX.Last(index) < ADXLevel)
             {
-                if (tradeType == TradeType.Buy && Bars.HighPrices.Last(0) > Bars.ClosePrices.Last(1))
-                {
-                    Print("I want better prices for my longs");
-                    return false;
-                }
-
-                if (tradeType == TradeType.Sell && Bars.LowPrices.Last(0) < Bars.ClosePrices.Last(1))
-                {
-                    Print("I want better prices for my shorts");
-                    return false;
-                }
-
-                // int roll = random.Next(1, 101);
-                // double finalPenalty = 0;
-
-                // finalPenalty = penalty - 15;
-
-                // Print("Rolled a {0}, orignal penalty is {1}, modified {2} for {3}", roll, penalty, finalPenalty, tradeType);
-
-                // if (finalPenalty >= roll)
-                // {
-                //     Print("No trade! {0} >= {1}", finalPenalty, roll);
-                //     return false;
-                // }
-
                 return true;
             }
 
             return false;
         }
 
-        // If penalty is rising, then add a modfier. 
-        // Rising penalty = BAD KARMA! So we are adding the level to 100 for it to always be added hen rising
-        // private double RisingPenaltyScoreAdjustment(double penalty, TradeType tradeType){
-
-        //     if ( (tradeType == TradeType.Buy && isLongPenaltyRising() ) || (tradeType == TradeType.Sell && isShortPenaltyRising() ) )
-        //     {
-        //         Print("Penalty rising {0} + {1} for {2} - Worst opportinuty!", penalty, 100, tradeType);
-        //         return (penalty + 100);
-        //     }
-
-        //     return penalty;
-        // }
-
-        // If penalty is falling, then add a modfier. 
-        // Falling penalty = GOOD!
-        private double FallingPenaltyScoreAdjustment(double penalty, TradeType tradeType)
+        private bool RollForEntry(double penalty, TradeType tradeType)
         {
+            // // Only trade when falling or second 0
+            // if ( (tradeType == TradeType.Buy && ( isLongPenaltyFalling() || ( penalty == 0 && GetCloseScore(tradeType, 2) == 0 && GetCloseScore(tradeType, 3) == 100 )) ) || (tradeType == TradeType.Sell && ( isShortPenaltyFalling() || ( penalty == 0 && GetCloseScore(tradeType, 2) == 0 && GetCloseScore(tradeType, 3) == 100) )) )
+            // {
 
-            if ((tradeType == TradeType.Buy && isLongPenaltyFalling() && isShortPenaltyRising()) || (tradeType == TradeType.Sell && isShortPenaltyFalling() && isLongPenaltyRising()))
-            {
-                Print("Penalty falling {0} - 10 for {1} - BEST China!", penalty, tradeType);
-                return (penalty - 10);
-            }
+            //     int roll = random.Next(1, 101);
+            //     double finalPenalty = penalty;
 
-            return penalty;
+            //     Print("Rolled a {0}, orignal penalty is {1}, modified {2} for {3}", roll, penalty, finalPenalty, tradeType);
+
+            //     if (finalPenalty >= roll)
+            //     {
+            //         Print("No trade! {0} >= {1}", finalPenalty, roll);
+            //         return false;
+            //     }
+
+            //     return true;
+            // }
+
+            // return false;
+            return true;
         }
 
         private bool isLongPenaltyFalling()
@@ -291,8 +287,30 @@ namespace cAlgo.Robots
 
         }
 
+        private bool IsMarketOpen()
+        {
+            if( (Server.Time.Hour >= 7 && Server.Time.Hour < 10) || (Server.Time.Hour >= 12 && Server.Time.Hour < 16) ) {     
+                if( Server.Time.Hour == 7 && Server.Time.Minute < 45 ) {
+                    return UseMarketHours ? false : true;
+                }
+                if( Server.Time.Hour == 12 && Server.Time.Minute < 30 ) {
+                    return UseMarketHours ? false : true;
+                }
+                return true;
+            }
+
+            return UseMarketHours ? false : true;
+
+        }
+
         private bool IsEntryPossible()
         {
+
+            if (!IsMarketOpen())
+            {
+                Print("Market is closed");
+                return false;
+            }
 
             if (MaxPositions > 0 && GetOpenPositions() >= MaxPositions)
             {
@@ -308,10 +326,15 @@ namespace cAlgo.Robots
             Stop();
         }
 
-        private int GetMeARandomNumber(int @from, int to)
+        private int GetMeARandomNumber(int from, int to)
         {
             Random rnd = new Random();
-            return rnd.Next(@from, to + 1);
+            return rnd.Next(from, to + 1);
+        }
+
+        private TradeType GetMeARandomTrade()
+        {
+            return GetMeARandomNumber(1,100) > 50 ? TradeType.Buy : TradeType.Sell;
         }
 
         private string GetMeAQuote()

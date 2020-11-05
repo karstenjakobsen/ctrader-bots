@@ -30,3 +30,8 @@ TODO
 allow close in negative if 2 or moreblocks have passed
 use stoch to enter insted og close score
 no trading in ranges
+
+
+in range sell on candle change
+in range take profits sooner
+fix buttons update

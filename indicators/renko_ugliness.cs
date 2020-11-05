@@ -22,10 +22,10 @@ namespace cAlgo
         [Parameter("PENALTY_CANDLE_WEIGHT", DefaultValue = 0)]
         public int PENALTY_CANDLE_WEIGHT { get; set; }
 
-        [Parameter("PENALTY_STOCHD_WEIGHT", DefaultValue = 20)]
+        [Parameter("PENALTY_STOCHD_WEIGHT", DefaultValue = 25)]
         public int PENALTY_STOCHD_WEIGHT { get; set; }
 
-        [Parameter("PENALTY_STOCHK_WEIGHT", DefaultValue = 20)]
+        [Parameter("PENALTY_STOCHK_WEIGHT", DefaultValue = 25)]
         public int PENALTY_STOCHK_WEIGHT { get; set; }
 
         [Parameter("PENALTY_MA_CROSS_WEIGHT", DefaultValue = 20)]
@@ -36,6 +36,15 @@ namespace cAlgo
 
         [Parameter("PENALTY_MA2_POINT_WEIGHT", DefaultValue = 20)]
         public int PENALTY_MA2_POINT_WEIGHT { get; set; }
+
+        [Parameter("PENALTY_MA3_POINT_WEIGHT", DefaultValue = 40)]
+        public int PENALTY_MA3_POINT_WEIGHT { get; set; }
+
+        [Parameter("ADXLevel", DefaultValue = 30)]
+        public int ADXLevel { get; set; }        
+
+        [Parameter("Use Range Method", DefaultValue = false)]
+        public bool UseRange { get; set; }   
 
         // [Parameter("PENALTY_RAINBOW_WEIGHT", DefaultValue = 25)]
         // public int PENALTY_RAINBOW_WEIGHT { get; set; }
@@ -63,6 +72,7 @@ namespace cAlgo
         private RainbowOscillator _RAIN;
         private MovingAverage _MA1;
         private MovingAverage _MA2;
+        private MovingAverage _MA3;
         private DirectionalMovementSystem _DMS;
         private Random random = new Random();
 
@@ -77,6 +87,7 @@ namespace cAlgo
             _STO = Indicators.StochasticOscillator(STOCH_KPERIODS, STOCH_KSLOWING, STOCH_DPERIODS, MovingAverageType.Simple);
             _MA1 = Indicators.MovingAverage(Source, 16, MovingAverageType.Simple);
             _MA2 = Indicators.MovingAverage(Source, 8, MovingAverageType.Exponential);
+            _MA3 = Indicators.MovingAverage(Source, 64, MovingAverageType.Simple);
             _RAIN = Indicators.RainbowOscillator(Source, 9, MovingAverageType.Simple);
             _DMS = Indicators.DirectionalMovementSystem(6);
         }
@@ -103,9 +114,10 @@ namespace cAlgo
 
                 CloseLong[index] = (_roundLongScore / Rounds);
                 CloseShort[index] = (_roundShortScore / Rounds);
+
                 // DrawRange(index);
-                DrawDobbeltBottom(index);   
-                StairsDown(index);             
+                // DrawDobbeltBottom1(index);
+                // StairsDown(index);
                 
 
             } catch (Exception)
@@ -114,22 +126,16 @@ namespace cAlgo
             }
         }
 
-        private void DrawRange(int index) {
-            string[] check = { "green", "red", "green", "red", "green" };
-            int[] blockindexlist = CheckPattern(check, index);
-            foreach(int block in blockindexlist)
-            {   
-                Chart.DrawIcon(Bars[block].OpenTime.ToString(), ChartIconType.Star, block, Bars[block].High, Color.Blue);
-            }
-        }
+        private void DrawDobbeltBottom1(int index) {
 
-        private void DrawDobbeltBottom(int index) {
             string[] check = { "green", "red", "red", "red", "red", "green", "green", "green", "green", "red", "red", "red" };
             int[] blockindexlist = CheckPattern(check, index);
             foreach(int block in blockindexlist)
             {   
                 Chart.DrawIcon(Bars[block].OpenTime.ToString(), ChartIconType.Star, block, Bars[block].High, Color.Blue);
             }
+
+            
         }
 
         private void StairsDown(int index) {
@@ -138,14 +144,35 @@ namespace cAlgo
             int[] blockindexlist = CheckPattern(check, index);
             foreach(int block in blockindexlist)
             {   
-                Chart.DrawIcon(Bars[block].OpenTime.ToString(), ChartIconType.Star, block, Bars[block].High, Color.Blue);
+                Chart.DrawIcon(Bars[block].OpenTime.ToString(), ChartIconType.Star, block, Bars[block].High, Color.Yellow);
             }
 
             string[] check2 = { "red", "red", "green", "red", "red", "green", "red", "green" };
             int[] blockindexlist2 = CheckPattern(check2, index);
             foreach(int block in blockindexlist2)
             {   
-                Chart.DrawIcon(Bars[block].OpenTime.ToString(), ChartIconType.Star, block, Bars[block].High, Color.Blue);
+                Chart.DrawIcon(Bars[block].OpenTime.ToString(), ChartIconType.Star, block, Bars[block].High, Color.Yellow);
+            }
+
+            string[] check3 = { "red", "green", "green", "red", "red", "red", "green", "red", "red" };
+            int[] blockindexlist3 = CheckPattern(check3, index);
+            foreach(int block in blockindexlist3)
+            {   
+                Chart.DrawIcon(Bars[block].OpenTime.ToString(), ChartIconType.Star, block, Bars[block].High, Color.Yellow);
+            }
+
+            string[] check4 = { "red", "green", "red", "green", "red", "red" };
+            int[] blockindexlist4 = CheckPattern(check4, index);
+            foreach(int block in blockindexlist4)
+            {   
+                Chart.DrawIcon(Bars[block].OpenTime.ToString(), ChartIconType.Star, block, Bars[block].High, Color.Yellow);
+            }
+
+            string[] check5 = { "green", "red", "red", "red", "green", "red", "red", "green"  };
+            int[] blockindexlist5 = CheckPattern(check5, index);
+            foreach(int block in blockindexlist5)
+            {   
+                Chart.DrawIcon(Bars[block].OpenTime.ToString(), ChartIconType.Star, block, Bars[block].High, Color.Yellow);
             }
 
         }
@@ -161,12 +188,31 @@ namespace cAlgo
             double stochDPenalty = GetStochDPenalty(tradeType, index);
             double stochKPenalty = GetStochKPenalty(tradeType, index);
             double candlePenalty = GetCandlePenalty(tradeType, index);
+            
             double MACrossPenalty = GetMACrossPenalty(tradeType, index);
             double MA1PointPenalty = GetMA1PointPenalty(tradeType, index);
             double MA2PointPenalty = GetMA2PointPenalty(tradeType, index);
-            // double RainbowPenalty = GetRainbowPenalty(tradeType, index);
+            double MA3PointPenalty = GetMA3PointPenalty(tradeType, index);
 
-            double _penalty = (stochDPenalty + stochKPenalty + candlePenalty + MACrossPenalty + MA1PointPenalty + MA2PointPenalty);
+            if ( UseRange )
+            {
+                if( InRange(index) == true )
+                {
+                    // when in range only use stoch
+                    MA1PointPenalty = 0;
+                    MA2PointPenalty = 0;
+                    MACrossPenalty = 0;
+                    MA3PointPenalty = 0;
+                }
+                else
+                {
+                    // When out of range only use MAs
+                    stochDPenalty = 0;
+                    stochKPenalty = 0;
+                }
+            }
+
+            double _penalty = (stochDPenalty + stochKPenalty + candlePenalty + MACrossPenalty + MA1PointPenalty + MA2PointPenalty + MA3PointPenalty);
 
             if (_penalty > MAX_PENALTY_VALUE)
             {
@@ -179,6 +225,15 @@ namespace cAlgo
 
             return _penalty;
 
+        }
+
+        private bool InRange(int index)
+        {
+            if (_DMS.ADX[index] < ADXLevel)
+            {
+                return true;
+            }
+            return false;
         }
 
         // RSI levels are use from the previous candle
@@ -259,6 +314,26 @@ namespace cAlgo
 
         }
 
+        private double GetMA3PointPenalty(TradeType tradeType, int index)
+        {
+
+            double _penalty = 0;
+
+            if (tradeType == TradeType.Buy && (_MA3.Result[index] < _MA3.Result[index - 1]))
+            {
+                _penalty = _penalty + 1;
+            }
+
+            if (tradeType == TradeType.Sell && (_MA3.Result[index] > _MA3.Result[index - 1]))
+            {
+                _penalty = _penalty + 1;
+            }
+
+            return (_penalty * PENALTY_MA3_POINT_WEIGHT);
+
+
+        }
+
         private double GetStochKPenalty(TradeType tradeType, int index)
         {
 
@@ -283,12 +358,22 @@ namespace cAlgo
 
             double _penalty = 0;
 
-            if (tradeType == TradeType.Sell && ((_STO.PercentD[index] > _STO.PercentD[index - 1] && _STO.PercentD[index] > 10) || (_STO.PercentD[index] > 93)))
+            // if (tradeType == TradeType.Sell && ((_STO.PercentD[index] > _STO.PercentD[index - 1] && _STO.PercentD[index] > 10) || (_STO.PercentD[index] > 93)))
+            // {
+            //     _penalty = 1;
+            // }
+
+            // if (tradeType == TradeType.Buy && ((_STO.PercentD[index] < _STO.PercentD[index - 1] && _STO.PercentD[index] < 93) || (_STO.PercentD[index] < 10)))
+            // {
+            //     _penalty = 1;
+            // }
+
+            if (tradeType == TradeType.Sell && (_STO.PercentD[index] > _STO.PercentD[index - 1] ))
             {
                 _penalty = 1;
             }
 
-            if (tradeType == TradeType.Buy && ((_STO.PercentD[index] < _STO.PercentD[index - 1] && _STO.PercentD[index] < 93) || (_STO.PercentD[index] < 10)))
+            if (tradeType == TradeType.Buy && (_STO.PercentD[index] < _STO.PercentD[index - 1] ))
             {
                 _penalty = 1;
             }
