@@ -65,12 +65,6 @@ namespace cAlgo.Robots
         [Parameter("Use Breakeven On Profit", DefaultValue = true, Group="Behavior")]
         public bool UseBreakevenOnProfit { get; set; }
 
-        [Parameter("Use Addition", DefaultValue = false, Group="Behavior")]
-        public bool UseAddition { get; set; }
-
-        [Parameter("Addition Close Score", DefaultValue = 100, Group="Behavior")]
-        public int AddPositionCloseScore { get; set; }
-
         [Parameter("Use Auto Sizing", DefaultValue = true, Group="Behavior")]
         public bool UseAutoSizing { get; set; }
 
@@ -99,17 +93,20 @@ namespace cAlgo.Robots
         private BAMMRenkoUgliness _BAMMRenkoUgliness;
         private DirectionalMovementSystem _DMS;
 
+        private double _DDD;
+        private string _searchID;
         private bool _IsLastBlockGreen;
         private DateTime _LongInCoolDownUntil;
         private DateTime _ShortInCoolDownUntil;
-        // daily drawdown
-        private double _DDD;
-
-        private string _searchID;
+        private TextBlock _PositionSizeRiskButton;
+        private TextBlock _DDDButton;
+        private TextBlock _IsMarketOpenButton;
+        private TextBlock _LongInCoolDownButton;
+        private TextBlock _ShortInCoolDownButton;
 
         private const string MORTEN_ID = "M_AUTO_SIZE";
+        private const string KALLE_ID = "K_AUTO_SIZE";
         private const string GENERAL_ID = "GENERAL_AUTO_SIZE";
-
         private const string BUTTON_RED = "#BD2709";
         private const string BUTTON_GREEN = "#0E9247";
         private const string BUTTON_BLUE = "#0D6EC4";
@@ -138,13 +135,26 @@ namespace cAlgo.Robots
                 Print("FollowComment must not be empty");
                 OnStop();
             }
+            else 
+            {
+                FollowComment = FollowComment.ToUpper();
 
-            _searchID = FollowComment.ToLower().StartsWith("m") ? MORTEN_ID : GENERAL_ID;
+                if(FollowComment.StartsWith("M"))
+                {
+                    _searchID = MORTEN_ID;
+                }
+                else if (FollowComment.StartsWith("K"))
+                {
+                    _searchID = KALLE_ID;
+                }
+                else
+                {
+                    _searchID = GENERAL_ID;
+                }
+            }
 
-            _BAMMRenkoUgliness = Indicators.GetIndicator<BAMMRenkoUgliness>(1, 0, 0, 0, 0, 35, 35, 35, 28, false, STOCH_KPERIODS, STOCH_KSLOWING, STOCH_DPERIODS, Source);
+            _BAMMRenkoUgliness = Indicators.GetIndicator<BAMMRenkoUgliness>(1, 0, 0, 0, 15, 100, 15, 15, 15, ADXLevel, false, STOCH_KPERIODS, STOCH_KSLOWING, STOCH_DPERIODS, Source);
             _DMS = Indicators.DirectionalMovementSystem(ADXPeriod);
-
-            SetDDDFromHistory();
 
             CreateDisplay();
 
@@ -154,24 +164,22 @@ namespace cAlgo.Robots
 
         private void CreateDisplay()
         {
+            SetDDDFromHistory();
+
+            SetPositionSizeRiskButton(GetPositionSizeRisk());
+            SetIsMarketOpenButton(IsMarketOpen());
+            SetShortInCoolDownButton(IsShortInCoolDown());
+            SetLongInCoolDownButton(IsLongInCoolDown());
 
             var wrapPanel = new WrapPanel();
 
             wrapPanel.Orientation = Orientation.Horizontal;   
             wrapPanel.AddChild(GetPositionSizeRiskButton());
-            wrapPanel.AddChild(IsMarketOpenButton());
             wrapPanel.AddChild(GetDDDButton());
-
-            if(IsLongInCoolDown())
-            {
-                wrapPanel.AddChild(LongInCoolDownButton());
-            }
-
-            if(IsShortInCoolDown())
-            {
-                wrapPanel.AddChild(ShortInCoolDownButton());
-            }
-
+            wrapPanel.AddChild(GetIsMarketOpenButton());
+            wrapPanel.AddChild(GetLongInCoolDownButton());
+            wrapPanel.AddChild(GetShortInCoolDownButton());
+            
             Chart.AddControl(wrapPanel);
         }
 
@@ -183,6 +191,7 @@ namespace cAlgo.Robots
 
             // Bind all trades from search ID
             _DDD = Math.Round(History.Where(trade => trade.EntryTime > startDateTime && trade.Label == _searchID).Sum(c => c.NetProfit),2);
+            SetDDDButton(_DDD);
 
         }
 
@@ -204,29 +213,169 @@ namespace cAlgo.Robots
             return true;
         }
 
-        private TextBlock GetPositionSizeRiskButton()
+        private void InitPositionSizeRiskButton()
         {
-            var textblock =  new TextBlock 
+            _PositionSizeRiskButton = new TextBlock 
             {
                 BackgroundColor = BUTTON_BLUE,
                 ForegroundColor = Color.White,
-                Text = GetPositionSizeRisk(),
+                Text = "",
                 Padding = "8 4",
                 Margin = 5
             };
-            // textblock.Hover += e => Print("Play button clicked");
-            return textblock;
         }
 
-        private Button GetDDDButton()
+        private void SetPositionSizeRiskButton(string text)
         {
-            var button = new Button 
+            if(_PositionSizeRiskButton == null)
             {
-                Text = "DDD: " + _DDD,
-                BackgroundColor = _DDD < 0 ? BUTTON_RED : BUTTON_GREEN,
+                InitPositionSizeRiskButton();
+            }
+        
+            _PositionSizeRiskButton.Text = text;
+        }
+
+        private TextBlock GetPositionSizeRiskButton()
+        {
+            return _PositionSizeRiskButton;
+        }
+
+        private void InitDDDButton()
+        {
+            _DDDButton = new TextBlock 
+            {
+                BackgroundColor = BUTTON_BLUE,
+                ForegroundColor = Color.White,
+                Text = "",
+                Padding = "8 4",
                 Margin = 5
             };
-            return button;
+        }
+
+        private void SetDDDButton(double ddd)
+        {
+            if(_DDDButton == null)
+            {
+                InitDDDButton();
+            }
+        
+            _DDDButton.Text = "DDD " + ddd;
+            _DDDButton.BackgroundColor = ddd >= 0 ? BUTTON_GREEN : BUTTON_RED;
+
+        }
+
+        private TextBlock GetDDDButton()
+        {
+            return _DDDButton;
+        }
+
+        private void InitIsMarketOpenButton()
+        {
+            
+            _IsMarketOpenButton = new TextBlock 
+            {
+                BackgroundColor = BUTTON_BLUE,
+                ForegroundColor = Color.White,
+                Text = "",
+                Padding = "8 4",
+                Margin = 5
+            }; 
+        }
+
+        private void SetIsMarketOpenButton(bool marketOpen)
+        {
+            if(_IsMarketOpenButton == null)
+            {
+                InitIsMarketOpenButton();
+            }
+        
+            _IsMarketOpenButton.Text = marketOpen ? "MARKET IS OPEN" : "MARKET IS CLOSED";
+            _IsMarketOpenButton.BackgroundColor = marketOpen ? BUTTON_GREEN : BUTTON_RED;
+
+        }
+
+        private void InitLongInCoolDownButton()
+        {
+            
+            _LongInCoolDownButton = new TextBlock 
+            {
+                BackgroundColor = BUTTON_BLUE,
+                ForegroundColor = Color.White,
+                Text = "",
+                Padding = "8 4",
+                Margin = 5
+            };
+              
+            
+        }
+
+        private void InitShortInCoolDownButton()
+        {
+            
+            _ShortInCoolDownButton = new TextBlock 
+            {
+                BackgroundColor = BUTTON_BLUE,
+                ForegroundColor = Color.White,
+                Text = "",
+                Padding = "8 4",
+                Margin = 5
+            };
+                     
+        }
+
+        private void SetShortInCoolDownButton(bool inCoolDown)
+        {
+            if(_ShortInCoolDownButton == null)
+            {
+                InitShortInCoolDownButton();
+            }
+        
+            if(inCoolDown)
+            {
+                _ShortInCoolDownButton.IsVisible = true;
+                _ShortInCoolDownButton.Text = "Short in CD";
+                _ShortInCoolDownButton.BackgroundColor = BUTTON_BLUE;
+            }
+            else
+            {
+                _ShortInCoolDownButton.IsVisible = false;
+            }
+
+        }
+
+        private void SetLongInCoolDownButton(bool inCoolDown)
+        {
+            if(_LongInCoolDownButton == null)
+            {
+                InitLongInCoolDownButton();
+            }
+        
+            if(inCoolDown)
+            {
+                _LongInCoolDownButton.IsVisible = true;
+                _LongInCoolDownButton.Text = "Long in CD";
+                _LongInCoolDownButton.BackgroundColor = BUTTON_BLUE;
+            }
+            else
+            {
+                _LongInCoolDownButton.IsVisible = false;
+            }
+
+        }
+        
+        private TextBlock GetLongInCoolDownButton()
+        {
+            return _LongInCoolDownButton;
+        }
+
+        private TextBlock GetShortInCoolDownButton()
+        {
+            return _ShortInCoolDownButton;
+        }
+
+        private TextBlock GetIsMarketOpenButton()
+        {
+            return _IsMarketOpenButton;
         }
 
         private bool IsDDDLowPassing()
@@ -285,62 +434,17 @@ namespace cAlgo.Robots
 
         }
 
-        private Button IsMarketOpenButton()
-        {
-            
-            if(IsMarketOpen() == true)
-            {
-                return new Button 
-                {
-                    Text = "MARKET IS OPEN",
-                    BackgroundColor = BUTTON_GREEN,
-                    Margin = 5
-                };
-            }
-            else
-            {
-                return new Button 
-                {
-                    Text = "MARKET IS CLOSED",
-                    BackgroundColor = BUTTON_RED,
-                    Margin = 5
-                };
-            }   
-            
-        }
-
-        private Button LongInCoolDownButton()
-        {
-            
-            return new Button 
-            {
-                Text = "Long CD " + _LongInCoolDownUntil.ToString("HH:mm:ss"),
-                BackgroundColor = BUTTON_RED,
-                Margin = 5
-            };
-              
-            
-        }
-
-        private Button ShortInCoolDownButton()
-        {
-            
-            return new Button 
-            {
-                Text = "Short CD " + _ShortInCoolDownUntil.ToString("HH:mm:ss"),
-                BackgroundColor = BUTTON_RED,
-                Margin = 5
-            };
-              
-            
-        }
-
         protected override void OnBar()
         {
             _IsLastBlockGreen = IsGreenCandle(Bars.OpenPrices.Last(1), Bars.ClosePrices.Last(1));
       
             // Run all checks
-            RunChecks();
+            RunPositionChecks();
+
+            // Update buttons
+            SetIsMarketOpenButton(IsMarketOpen());
+            SetShortInCoolDownButton(IsShortInCoolDown());
+            SetLongInCoolDownButton(IsLongInCoolDown());
 
         }
 
@@ -358,8 +462,12 @@ namespace cAlgo.Robots
             if( position.Pips < -(StopLossPips*0.9) && CurrentSymbol.Name == position.SymbolName )
             {
                 Print("COOLDOWN until {0} lost more than {1} pips", DateTime.Now.AddSeconds(CoolDownSeconds), -(StopLossPips*0.9));
+                
                 _LongInCoolDownUntil = DateTime.Now.AddSeconds(CoolDownSeconds);
                 _ShortInCoolDownUntil = DateTime.Now.AddSeconds(CoolDownSeconds);
+
+                SetShortInCoolDownButton(IsShortInCoolDown());
+                SetLongInCoolDownButton(IsLongInCoolDown());
             }
         }
 
@@ -456,7 +564,7 @@ namespace cAlgo.Robots
                 }
 
 
-                if ( TrailingStopPips > 0 && TrailingStopPips >= position.Pips ) {
+                if ( TrailingStopPips > 0 && position.Pips >= TrailingStopPips && position.HasTrailingStop == false ) {
                     position.ModifyTrailingStop(true);
                 }
 
@@ -517,30 +625,12 @@ namespace cAlgo.Robots
             return false;
         }
 
-        private void AddToPosition(Position position)
-        {
-            if( ( (position.TradeType == TradeType.Buy && !_IsLastBlockGreen) || ( position.TradeType == TradeType.Sell && _IsLastBlockGreen) ) && GetCloseScore(position.TradeType) < AddPositionCloseScore )
-            {
-                Print("Adding 50% to position");
-                var units = CurrentSymbol.QuantityToVolumeInUnits(position.Quantity*1.5);
-                units = CurrentSymbol.NormalizeVolumeInUnits(units, RoundingMode.Up);
-                
-                ModifyPosition(position, units);
-
-            }
-        }
-
-        private void RunChecks()
+        private void RunPositionChecks()
         {
             var positions = Positions.Where(x => x.Comment == FollowComment && x.SymbolName == CurrentSymbol.Name);
 
             foreach (Position position in positions)
             {
-                // Only set on positions with breakeven
-                if( UseAddition && PositionHasBreakeven(position) == true )
-                {
-                    AddToPosition(position);
-                }
 
                 if( TryToClosePosition(position) == true)
                 {
@@ -592,9 +682,11 @@ namespace cAlgo.Robots
         private bool PositionHasHalfBreakeven(Position position)
         {
             double _SLDiff = (double) (position.EntryPrice-position.StopLoss);
-            double diffpipvalue = Math.Abs(Math.Round(_SLDiff, 2)/CurrentSymbol.PipSize);
+            double diffpipvalue = Math.Abs(_SLDiff)/CurrentSymbol.PipSize;
 
-            if ( diffpipvalue == StopLossPips )
+            // Print("Checking Half break {0} {1} {2}", diffpipvalue, StopLossPips*0.9, StopLossPips*1.1);
+
+            if ( (diffpipvalue >= StopLossPips*0.98) && (diffpipvalue <= StopLossPips*1.02) )
             {
                 return false;
             }

@@ -33,5 +33,4 @@ no trading in ranges
 
 
 in range sell on candle change
-in range take profits sooner
 fix buttons update

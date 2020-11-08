@@ -11,13 +11,13 @@ namespace cAlgo.Robots
     public class BAMM_RENKO_RANDOM : Robot
     {
 
-        [Parameter(DefaultValue = "BAMM_RENKO_RANDOM")]
+        [Parameter(DefaultValue = "K1")]
         public string cBotLabel { get; set; }
 
         [Parameter("Currency pair", DefaultValue = "")]
         public string TradeSymbol { get; set; }
 
-        [Parameter("Lot Size", DefaultValue = 0.1, MinValue = 0.01, Step = 0.01)]
+        [Parameter("Lot Size", DefaultValue = 0.01, MinValue = 0.01, Step = 0.01)]
         public double LotSize { get; set; }
 
         [Parameter("Take Profit", DefaultValue = 10, MinValue = 0.5, Step = 0.5)]
@@ -35,9 +35,6 @@ namespace cAlgo.Robots
         [Parameter("Maximum Short positions", DefaultValue = 1)]
         public int MaxShortPositions { get; set; }
 
-        [Parameter("Use Limit Orders", DefaultValue = true)]
-        public bool UseLimitOrders { get; set; }
-
         [Parameter("STOCH_KPERIODS", DefaultValue = 6)]
         public int STOCH_KPERIODS { get; set; }
 
@@ -53,8 +50,15 @@ namespace cAlgo.Robots
         [Parameter("ADXLevel", DefaultValue = 28)]
         public int ADXLevel { get; set; }
 
-         [Parameter("Use Market Hours", DefaultValue = true)]
+        [Parameter("Use Market Hours", DefaultValue = true, Group="Behavior")]
         public bool UseMarketHours { get; set; }
+
+        [Parameter("Use Addition", DefaultValue = false, Group="Behavior")]
+        public bool UseAddition { get; set; }
+
+        [Parameter("Block Size", DefaultValue = 10)]
+        public int BlockSize { get; set; }
+        
 
 
         [Parameter()]
@@ -68,6 +72,7 @@ namespace cAlgo.Robots
         private DirectionalMovementSystem _DMS;
         private const string LONG_NAME = "Long";
         private const string SHORT_NAME = "Short";
+        private bool _IsLastBlockGreen;
 
         protected override void OnStart()
         {
@@ -82,61 +87,122 @@ namespace cAlgo.Robots
                 OnStop();
             }
 
-            _BAMMRenkoUgliness = Indicators.GetIndicator<BAMMRenkoUgliness>(1, 0, 0, 0, 0, 35, 35, 35, 28, false, STOCH_KPERIODS, STOCH_KSLOWING, STOCH_DPERIODS, Source);
+            _BAMMRenkoUgliness = Indicators.GetIndicator<BAMMRenkoUgliness>(1, 0, 0, 0, 15, 100, 15, 15, 15, ADXLevel, false, STOCH_KPERIODS, STOCH_KSLOWING, STOCH_DPERIODS, Source);
             _DMS = Indicators.DirectionalMovementSystem(ADXPeriod);
 
         }
 
         protected override void OnBar()
         {
+
             CancelPendingOrders();
+            
             EnterTrades();
+
+            if( UseAddition )
+            {
+                 _IsLastBlockGreen = IsGreenCandle(Bars.OpenPrices.Last(1), Bars.ClosePrices.Last(1));
+
+                //CheckAddition();
+            }
         }
+
+        private bool IsGreenCandle(double lastBarOpen, double lastBarClose)
+        {
+            return (lastBarOpen < lastBarClose) ? true : false;
+        }
+
+        private bool PositionHasBreakeven(Position position)
+        {
+            if ( (position.TradeType == TradeType.Buy && position.EntryPrice > position.StopLoss) || (position.TradeType == TradeType.Sell && position.EntryPrice < position.StopLoss))
+            {
+                return false;
+            }
+            return true;
+        }
+
+        // private void CheckAddition()
+        // {
+        //     var positions = GetOpenPositions();
+
+        //     foreach (Position position in positions)
+        //     {        
+        //         double catchPrice = 0;
+
+        //         // Open a limit order lower og higher and penalty is falling again.
+        //         if( PositionHasBreakeven(position) == true && position.TradeType == TradeType.Buy && isLongPenaltyFalling() )
+        //         {
+        //             // Open new limit order
+        //             var volumeInUnits = CurrentSymbol.QuantityToVolumeInUnits(LotSize);
+        //             volumeInUnits = CurrentSymbol.NormalizeVolumeInUnits(volumeInUnits, RoundingMode.Down);
+
+        //             catchPrice = _IsLastBlockGreen ? Bars.OpenPrices.Last(1) : (Bars.ClosePrices.Last(0) - (BlockSize-CurrentSymbol.Spread));
+        //             Print("Hoping to catch this UPTREND lower at {0}", catchPrice);
+        //             PlaceLimitOrderAsync(TradeType.Sell, CurrentSymbol.Name, volumeInUnits, catchPrice, cBotLabel, StopLoss, TakeProfit, null, cBotLabel, false);
+        //         }
+        //         else if( PositionHasBreakeven(position) == true && position.TradeType == TradeType.Sell && isShortPenaltyFalling() )
+        //         {
+        //             // Open new limit order
+        //             var volumeInUnits = CurrentSymbol.QuantityToVolumeInUnits(LotSize);
+        //             volumeInUnits = CurrentSymbol.NormalizeVolumeInUnits(volumeInUnits, RoundingMode.Down);
+
+        //             catchPrice = !_IsLastBlockGreen ? Bars.OpenPrices.Last(1) : (Bars.ClosePrices.Last(0) + (BlockSize-CurrentSymbol.Spread));
+        //             Print("Hoping to catch this DOWNTREND higher at {0}", catchPrice);
+        //             PlaceLimitOrderAsync(TradeType.Sell, CurrentSymbol.Name, volumeInUnits, catchPrice, cBotLabel, StopLoss, TakeProfit, null, cBotLabel, false);
+        //         }
+        //     }
+             
+        // }
 
         protected override void OnTick()
         {
             
         }
 
-        private int GetOpenPositions()
+        private Position[] GetOpenPositions()
         {
-            return Positions.FindAll(cBotLabel, TradeSymbol).Length;
+            return Positions.FindAll("K_AUTO_SIZE", TradeSymbol);
         }
 
-        private int GetOpenLongPositions()
+        private int GetOpenPositionsCount()
         {
-            return Positions.FindAll(cBotLabel, TradeSymbol, TradeType.Buy).Length;
+            return GetOpenPositions().Length;
         }
 
-        private int GetOpenShortPositions()
+        private Position[] GetOpenLongPositions()
         {
-            return Positions.FindAll(cBotLabel, TradeSymbol, TradeType.Sell).Length;
+            return Positions.FindAll("K_AUTO_SIZE", TradeSymbol, TradeType.Buy);
+        }
+
+        private int GetOpenLongPositionsCount()
+        {
+            return GetOpenLongPositions().Length;
+        }
+
+        private Position[] GetOpenShortPositions()
+        {
+            return Positions.FindAll("K_AUTO_SIZE", TradeSymbol, TradeType.Sell);
+        }
+
+        private int GetOpenShortPositionsCount()
+        {
+            return GetOpenShortPositions().Length;
         }
 
         private void EnterTrades()
         {
             try
             {
-
-                TradeType trade = GetMeARandomTrade();
-
-                if(trade == TradeType.Buy)
+                
+                if (IsLongPossible(TradeType.Buy) == true)
                 {
-                    if (IsLongPossible(trade) == true)
-                    {
-                        double _modLotSize = LotSize;
-                        OpenOrder(trade, _modLotSize, StopLoss, TakeProfit);
-                    }
-                }
-                else
-                {
-                    if (IsShortPossible(trade) == true)
-                    {
-                        double _modLotSize = LotSize;
-                        OpenOrder(trade, LotSize, StopLoss, TakeProfit);
-                    }
+                    OpenOrder(TradeType.Buy, LotSize, StopLoss, TakeProfit);
                 }
                 
+                if (IsLongPossible(TradeType.Sell) == true)
+                {
+                    OpenOrder(TradeType.Sell, LotSize, StopLoss, TakeProfit);
+                }                
 
             } catch (Exception e)
             {
@@ -162,27 +228,8 @@ namespace cAlgo.Robots
             var volumeInUnits = CurrentSymbol.QuantityToVolumeInUnits(dLots);
             volumeInUnits = CurrentSymbol.NormalizeVolumeInUnits(volumeInUnits, RoundingMode.Down);
 
-            if( UseLimitOrders == true )
-            {
-                if (tradeType == TradeType.Buy)
-                {
-                    Print("Hoping to catch this UPTREND lower at {0}", Bars.OpenPrices.Last(1));
-                    PlaceLimitOrderAsync(tradeType, CurrentSymbol.Name, volumeInUnits, (Bars.OpenPrices.Last(1)), cBotLabel, stopLoss, takeProfitPips, null, null, false);
-                    
-                }
-                else if (tradeType == TradeType.Sell)
-                {
-                    Print("Hoping to catch this DOWNTREND higher at {0}", Bars.OpenPrices.Last(1));
-                    PlaceLimitOrderAsync(tradeType, CurrentSymbol.Name, volumeInUnits, (Bars.OpenPrices.Last(1)), cBotLabel, stopLoss, takeProfitPips, null, null, false);
-                }
-
-                Print(GetMeAQuote(), (tradeType == TradeType.Buy) ? LONG_NAME : SHORT_NAME);
-            }
-            else
-            {
-                ExecuteMarketOrder(tradeType, CurrentSymbol.Name, volumeInUnits, cBotLabel, stopLoss, takeProfitPips, null, false);
-                Print(GetMeAQuote(), (tradeType == TradeType.Buy) ? LONG_NAME : SHORT_NAME);
-            }
+            ExecuteMarketOrderAsync(tradeType, CurrentSymbol.Name, volumeInUnits, cBotLabel, stopLoss, takeProfitPips, cBotLabel, false);
+            Print(GetMeAQuote(), (tradeType == TradeType.Buy) ? LONG_NAME : SHORT_NAME);
             
         }
 
@@ -210,26 +257,25 @@ namespace cAlgo.Robots
 
         private bool RollForEntry(double penalty, TradeType tradeType)
         {
-            // // Only trade when falling or second 0
-            // if ( (tradeType == TradeType.Buy && ( isLongPenaltyFalling() || ( penalty == 0 && GetCloseScore(tradeType, 2) == 0 && GetCloseScore(tradeType, 3) == 100 )) ) || (tradeType == TradeType.Sell && ( isShortPenaltyFalling() || ( penalty == 0 && GetCloseScore(tradeType, 2) == 0 && GetCloseScore(tradeType, 3) == 100) )) )
-            // {
+            // Only trade when falling
+            if ( (tradeType == TradeType.Buy && isLongPenaltyFalling()) || (tradeType == TradeType.Sell && isShortPenaltyFalling()) )
+            {
 
-            //     int roll = random.Next(1, 101);
-            //     double finalPenalty = penalty;
+                int roll = random.Next(1, 101);
+                double finalPenalty = penalty;
 
-            //     Print("Rolled a {0}, orignal penalty is {1}, modified {2} for {3}", roll, penalty, finalPenalty, tradeType);
+                Print("Rolled a {0}, orignal penalty is {1}, modified {2} for {3}", roll, penalty, finalPenalty, tradeType);
 
-            //     if (finalPenalty >= roll)
-            //     {
-            //         Print("No trade! {0} >= {1}", finalPenalty, roll);
-            //         return false;
-            //     }
+                if (finalPenalty >= roll)
+                {
+                    Print("No trade! {0} >= {1}", finalPenalty, roll);
+                    return false;
+                }
 
-            //     return true;
-            // }
+                return true;
+            }
 
-            // return false;
-            return true;
+            return false;
         }
 
         private bool isLongPenaltyFalling()
@@ -260,13 +306,12 @@ namespace cAlgo.Robots
                 return false;
             }
 
-            if (MaxLongPositions > 0 && GetOpenLongPositions() >= MaxLongPositions)
+            if (MaxLongPositions > 0 && GetOpenLongPositionsCount() >= MaxLongPositions)
             {
                 return false;
             }
 
             return RollForEntry(_BAMMRenkoUgliness.CloseLong.Last(1), tradeType);
-            // return MaxLongOpportunity();
 
         }
 
@@ -278,7 +323,7 @@ namespace cAlgo.Robots
                 return false;
             }
 
-            if (MaxShortPositions > 0 && GetOpenShortPositions() >= MaxShortPositions)
+            if (MaxShortPositions > 0 && GetOpenShortPositionsCount() >= MaxShortPositions)
             {
                 return false;
             }
@@ -312,7 +357,7 @@ namespace cAlgo.Robots
                 return false;
             }
 
-            if (MaxPositions > 0 && GetOpenPositions() >= MaxPositions)
+            if (MaxPositions > 0 && GetOpenPositionsCount() >= MaxPositions)
             {
                 return false;
             }

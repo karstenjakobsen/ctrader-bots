@@ -28,8 +28,11 @@ namespace cAlgo
         [Parameter("PENALTY_STOCHK_WEIGHT", DefaultValue = 25)]
         public int PENALTY_STOCHK_WEIGHT { get; set; }
 
-        [Parameter("PENALTY_MA_CROSS_WEIGHT", DefaultValue = 20)]
-        public int PENALTY_MA_CROSS_WEIGHT { get; set; }
+        [Parameter("PENALTY_MA12_CROSS_WEIGHT", DefaultValue = 20)]
+        public int PENALTY_MA12_CROSS_WEIGHT { get; set; }
+
+        [Parameter("PENALTY_MA123_CROSS_WEIGHT", DefaultValue = 20)]
+        public int PENALTY_MA123_CROSS_WEIGHT { get; set; }
 
         [Parameter("PENALTY_MA1_POINT_WEIGHT", DefaultValue = 20)]
         public int PENALTY_MA1_POINT_WEIGHT { get; set; }
@@ -189,7 +192,8 @@ namespace cAlgo
             double stochKPenalty = GetStochKPenalty(tradeType, index);
             double candlePenalty = GetCandlePenalty(tradeType, index);
             
-            double MACrossPenalty = GetMACrossPenalty(tradeType, index);
+            double MA12CrossPenalty = GetMA12CrossPenalty(tradeType, index);
+            double MA123CrossPenalty = GetMA123CrossPenalty(tradeType, index);
             double MA1PointPenalty = GetMA1PointPenalty(tradeType, index);
             double MA2PointPenalty = GetMA2PointPenalty(tradeType, index);
             double MA3PointPenalty = GetMA3PointPenalty(tradeType, index);
@@ -201,7 +205,8 @@ namespace cAlgo
                     // when in range only use stoch
                     MA1PointPenalty = 0;
                     MA2PointPenalty = 0;
-                    MACrossPenalty = 0;
+                    MA12CrossPenalty = 0;
+                    MA123CrossPenalty = 0;
                     MA3PointPenalty = 0;
                 }
                 else
@@ -212,7 +217,7 @@ namespace cAlgo
                 }
             }
 
-            double _penalty = (stochDPenalty + stochKPenalty + candlePenalty + MACrossPenalty + MA1PointPenalty + MA2PointPenalty + MA3PointPenalty);
+            double _penalty = (stochDPenalty + stochKPenalty + candlePenalty + MA12CrossPenalty + MA123CrossPenalty + MA1PointPenalty + MA2PointPenalty + MA3PointPenalty);
 
             if (_penalty > MAX_PENALTY_VALUE)
             {
@@ -236,27 +241,7 @@ namespace cAlgo
             return false;
         }
 
-        // RSI levels are use from the previous candle
-        // private double GetRainbowPenalty(TradeType tradeType, int index)
-        // {
-
-        //     double _penalty = 0;
-
-        //     if (tradeType == TradeType.Buy && (_RAIN.Result[index] >= PENALTY_RAINBOW_HIGH_LEVEL))
-        //     {
-        //         _penalty = _penalty + 1;
-        //     }
-
-        //     if (tradeType == TradeType.Sell && (_RAIN.Result[index] <= PENALTY_RAINBOW_LOW_LEVEL))
-        //     {
-        //         _penalty = _penalty + 1;
-        //     }
-
-        //     return (_penalty * PENALTY_RAINBOW_WEIGHT);
-
-        // }
-
-        private double GetMACrossPenalty(TradeType tradeType, int index)
+        private double GetMA12CrossPenalty(TradeType tradeType, int index)
         {
 
             double _penalty = 0;
@@ -271,7 +256,26 @@ namespace cAlgo
                 _penalty = _penalty + 1;
             }
 
-            return (_penalty * PENALTY_MA_CROSS_WEIGHT);
+            return (_penalty * PENALTY_MA12_CROSS_WEIGHT);
+
+        }
+
+        private double GetMA123CrossPenalty(TradeType tradeType, int index)
+        {
+
+            double _penalty = 1;
+
+            if (tradeType == TradeType.Buy && (_MA2.Result[index] > _MA3.Result[index] && _MA1.Result[index] > _MA3.Result[index] ))
+            {
+                _penalty = 0;
+            }
+
+            if (tradeType == TradeType.Sell && (_MA2.Result[index] < _MA3.Result[index] && _MA1.Result[index] < _MA3.Result[index] ))
+            {
+                _penalty = 0;
+            }
+
+            return (_penalty * PENALTY_MA123_CROSS_WEIGHT);
 
         }
 
