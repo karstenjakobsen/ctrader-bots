@@ -343,12 +343,12 @@ namespace cAlgo
 
             double _penalty = 0;
 
-            if (tradeType == TradeType.Sell && ((_STO.PercentK[index] > _STO.PercentK[index - 1] && _STO.PercentK[index] > 10) || (_STO.PercentK[index] > 90)))
+            if (tradeType == TradeType.Sell && ( (_STO.PercentK[index] > _STO.PercentK[index - 1] ) || ( _STO.PercentK[index] > 95 ) ))
             {
                 _penalty = 1;
             }
 
-            if (tradeType == TradeType.Buy && ((_STO.PercentK[index] < _STO.PercentK[index - 1] && _STO.PercentK[index] < 88) || (_STO.PercentK[index] < 10)))
+            if (tradeType == TradeType.Buy && ( (_STO.PercentK[index] < _STO.PercentK[index - 1] ) || ( _STO.PercentK[index] < 5 )))
             {
                 _penalty = 1;
             }
@@ -362,15 +362,6 @@ namespace cAlgo
 
             double _penalty = 0;
 
-            // if (tradeType == TradeType.Sell && ((_STO.PercentD[index] > _STO.PercentD[index - 1] && _STO.PercentD[index] > 10) || (_STO.PercentD[index] > 93)))
-            // {
-            //     _penalty = 1;
-            // }
-
-            // if (tradeType == TradeType.Buy && ((_STO.PercentD[index] < _STO.PercentD[index - 1] && _STO.PercentD[index] < 93) || (_STO.PercentD[index] < 10)))
-            // {
-            //     _penalty = 1;
-            // }
 
             if (tradeType == TradeType.Sell && (_STO.PercentD[index] > _STO.PercentD[index - 1] ))
             {
