@@ -568,6 +568,12 @@ namespace cAlgo.Robots
                     HalfBreakEven(position);
                 }
 
+                // Take half risk of the table
+                if (position.Pips > 0 && position.HasTrailingStop == false && GetNetProfitPercentage(position.NetProfit) >= LockInProfitPercent )
+                {
+                    // Check for profit taking and activate breakeven + TSL
+                    LockInProfits(position);
+                }
 
                 if ( TrailingStopPips > 0 && position.Pips >= TrailingStopPips && position.HasTrailingStop == false ) {
                     position.ModifyTrailingStop(true);
@@ -641,13 +647,6 @@ namespace cAlgo.Robots
                 if( TryToClosePosition(position) == true)
                 {
                     ClosePosition(position);
-                }
-
-                // Take half risk of the table
-                if (position.Pips > 0 && position.HasTrailingStop == false && GetNetProfitPercentage(position.NetProfit) >= LockInProfitPercent )
-                {
-                    // Check for profit taking and activate breakeven + TSL
-                    LockInProfits(position);
                 }
 
             }

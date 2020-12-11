@@ -11,13 +11,13 @@ namespace cAlgo.Robots
     public class BAMM_MTF : Robot
     {
  
-        [Parameter(DefaultValue = "BAMM_MTF")]
+        [Parameter(DefaultValue = "BAMM_MTF", Group="ID")]
         public string cBotLabel { get; set; }
  
-        [Parameter("Currency pair", DefaultValue = "")]
+        [Parameter("Currency pair", DefaultValue = "", Group="ID")]
         public string TradeSymbol { get; set; }
 
-        [Parameter("Initiator", DefaultValue = false)]
+        [Parameter("Initiator", DefaultValue = false, Group="Initiator")]
         public bool Initiator { get; set; }
 
         [Parameter("Size Bits", DefaultValue = 4)]
@@ -26,10 +26,10 @@ namespace cAlgo.Robots
         [Parameter("Bit", DefaultValue = 1)]
         public int Bit { get; set; }
 
-        [Parameter("Sell Price", DefaultValue = 100)]
+        [Parameter("Sell Price", DefaultValue = 100, Group="Initiator")]
         public double SellPrice { get; set; }
 
-        [Parameter("Buy Price", DefaultValue = 0.1)]
+        [Parameter("Buy Price", DefaultValue = 0.1, Group="Initiator")]
         public double BuyPrice { get; set; }
 
         [Parameter()]
@@ -273,8 +273,9 @@ namespace cAlgo.Robots
             volumeInUnits = CurrentSymbol.NormalizeVolumeInUnits(volumeInUnits, RoundingMode.Down);
 
             // Remove old orders
-            var pendingOrders = PendingOrders.Where(order => order.Label == cBotLabel && order.SymbolName == CurrentSymbol.Name);
-            foreach (var order in PendingOrders)
+            // Print("{0}, {1}", cBotLabel, CurrentSymbol.Name);
+            var pendingOrders = PendingOrders.Where(order =>  order.SymbolName == CurrentSymbol.Name && order.Label == cBotLabel);
+            foreach (var order in pendingOrders)
             {
                 CancelPendingOrder(order);
             }
