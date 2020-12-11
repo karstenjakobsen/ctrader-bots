@@ -53,14 +53,9 @@ namespace cAlgo.Robots
         [Parameter("Use Market Hours", DefaultValue = true, Group="Behavior")]
         public bool UseMarketHours { get; set; }
 
-        [Parameter("Use Addition", DefaultValue = false, Group="Behavior")]
-        public bool UseAddition { get; set; }
-
         [Parameter("Block Size", DefaultValue = 10)]
         public int BlockSize { get; set; }
         
-
-
         [Parameter()]
         public DataSeries Source { get; set; }
 
@@ -99,26 +94,11 @@ namespace cAlgo.Robots
             
             EnterTrades();
 
-            if( UseAddition )
-            {
-                 _IsLastBlockGreen = IsGreenCandle(Bars.OpenPrices.Last(1), Bars.ClosePrices.Last(1));
-
-                //CheckAddition();
-            }
         }
 
         private bool IsGreenCandle(double lastBarOpen, double lastBarClose)
         {
             return (lastBarOpen < lastBarClose) ? true : false;
-        }
-
-        private bool PositionHasBreakeven(Position position)
-        {
-            if ( (position.TradeType == TradeType.Buy && position.EntryPrice > position.StopLoss) || (position.TradeType == TradeType.Sell && position.EntryPrice < position.StopLoss))
-            {
-                return false;
-            }
-            return true;
         }
 
         // private void CheckAddition()

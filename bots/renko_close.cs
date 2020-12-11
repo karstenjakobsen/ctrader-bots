@@ -477,8 +477,11 @@ namespace cAlgo.Robots
 
             if( (position.SymbolName != CurrentSymbol.Name) || (FollowComment != position.Comment) )
             {
+                // Print("Not wathcing you {0} {1} {2} {3}", position.SymbolName, CurrentSymbol.Name, FollowComment, position.Comment);
                 return;
             }
+
+            // Print("Hey ho - lets go!");
             
             // Check if market is open
             if( !IsMarketOpen() )
@@ -519,6 +522,8 @@ namespace cAlgo.Robots
             // Auto size
             if( UseAutoSizing && position.Label == "" )
             {
+
+                // Print("Autosize!");
 
                 if( position.Quantity > 0.02 )
                 {
@@ -631,6 +636,7 @@ namespace cAlgo.Robots
 
             foreach (Position position in positions)
             {
+                Print("Checking pos {0}", position.Id);
 
                 if( TryToClosePosition(position) == true)
                 {
